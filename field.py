@@ -20,6 +20,19 @@ class Field(ABC):
                 raise FieldException(f"No {params[0]} shaped field implemented.")
             
 
+    def cell_exists(self, coords = None, cel_list = None):
+        # this method can take both list of cells and single cell
+        if not self.cells:
+            logger.warning("Tried to check cell existance with no field.")
+            return False
+        
+        if coords is not None: return coords in self.cells
+        if cel_list is not None:
+            return all(c in self.cells for c in cel_list)
+        return False
+
+
+
 
     def generate_square(self, height: int, width: int):
         cell_id = 0
@@ -28,12 +41,17 @@ class Field(ABC):
             for x in range(height):
 
                 self.cells[(y, x)] = Cell(y, x)
-                logger.info(f"Cell ({y},{x}) is generated")
+                logger.info(f"{self.cells[(y, x)]} - is generated")
                 cell_id += 1
 
 
 class Cell:
-    def __init__(self, y: int, x: int, *, isPlayfield = True):
+    def __init__(self, y: int, x: int, *, isVoid = False):
         self.y, self.x = y, x
-        self.isPlayfield = isPlayfield
+        self.isVoid = isVoid
         self.isOccupied = False
+        self.occupiedBy = None
+    
+    def __str__(self):
+        if self.isVoid: return f"Void ({self.x},{self.y})"
+        return f"Cell ({self.x},{self.y}) occupied by {self.occupiedBy}"

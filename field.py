@@ -71,18 +71,21 @@ class Field:
 
 
 class Cell:
-    def __init__(self, y: int, x: int, *, isVoid = False):
+    def __init__(self, y: int, x: int, *, is_void = False):
         if not(isinstance(y, int) and isinstance(x, int)): raise TypeError("Coordinates must be integers.")
         self.y, self.x = y, x
-        self.isVoid = isVoid
-        self.isOccupied = False
-        self.occupiedBy = None
+        self.is_void = is_void
+        self.is_occupied = False
+        self.occupied_by = None
     
     def __str__(self):
-        if self.isVoid: return f"Void ({self.y},{self.x})"
-        return f"Cell ({self.y},{self.x}) occupied by {self.occupiedBy}"
+        if self.is_void: return f"Void ({self.y},{self.x})"
+        return f"Cell ({self.y},{self.x}) occupied by {self.occupied_by}"
+    
+    def __repr__(self):
+        return f"Cell(y={self.y}, x={self.x}, is_void={self.is_void}, is_occupied={self.is_occupied}, occupied_by={self.occupied_by})"
 
 
     def clear(self):
-        self.isOccupied = False
-        self.occupiedBy = None
+        self.is_occupied = False
+        self.occupied_by = None

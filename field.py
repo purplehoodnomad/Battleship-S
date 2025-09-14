@@ -1,4 +1,3 @@
-from abc import ABC, abstractmethod
 import logging
 
 logger = logging.getLogger(__name__)
@@ -6,52 +5,84 @@ logger = logging.getLogger(__name__)
 class FieldException(Exception):
     pass
 
+# this method used for not to doubling log and throwing exception then
+def raise_logged(e: Exception): 
+    logger.error(str(e))
+    raise e
 
-class Field(ABC):
+class Field:
     def __init__(self):
-        self.cells = {}
+        self._cells = {}
+    
+    @property
+    def is_empty(self): return not self._cells
 
+    def wipe_field(self): self._cells = {}
 
-    def generate_field(self, params: list): # gets list of generation parameters, params[0] is always pattern name
+    def cell_exists(self, coords: tuple): return bool(coords) and coords in self._cells
+    
+
+    def generate_field(self, params: list) -> None: # gets list of generation parameters, first is always pattern name
         match params[0]:
 
             case "square": return self.generate_square(params[1], params[2])
             case _:
                 raise FieldException(f"No {params[0]} shaped field implemented.")
-            
-
-    def cell_exists(self, coords = None, cel_list = None):
-        # this method can take both list of cells and single cell
-        if not self.cells:
-            logger.warning("Tried to check cell existance with no field.")
-            return False
+    
+    def get_cells(self, coords):
+        """
+        This method can take both (y, x) and list of coordinates.
+        It throws an error either of coordinates in list in not existing
+        """
+        if self.is_empty:
+            logger.warning("Tried to get cell with no field")
+            return None
         
-        if coords is not None: return coords in self.cells
-        if cel_list is not None:
-            return all(c in self.cells for c in cel_list)
-        return False
+        if not coords:
+            raise_logged(FieldException("Asked for no cells."))
+        
+        if isinstance(coords, tuple) and self.cell_exists(coords): return self._cells[coords]
 
+        elif isinstance(coords, list):
+            output = []
 
+            for element in coords:
+
+                if not (isinstance(element, tuple) and self.cell_exists(element)):
+                    raise_logged(FieldException(f"Requested Cell {element} does not exist"))
+
+                else: element = self._cells[element]
+                output.append(element)
+
+            return output
+        
+        raise_logged(FieldException(f"Requested Cell {coords} does not exist"))
 
 
     def generate_square(self, height: int, width: int):
         cell_id = 0
 
-        for y in range(width):
-            for x in range(height):
+        for y in range(height):
+            for x in range(width):
 
-                self.cells[(y, x)] = Cell(y, x)
-                logger.info(f"{self.cells[(y, x)]} - is generated")
+                self._cells[(y, x)] = Cell(y, x)
+                logger.debug(f"{self._cells[(y, x)]} - is generated.")
                 cell_id += 1
 
 
 class Cell:
     def __init__(self, y: int, x: int, *, isVoid = False):
+        if not(isinstance(y, int) and isinstance(x, int)): raise TypeError("Coordinates must be integers.")
         self.y, self.x = y, x
         self.isVoid = isVoid
         self.isOccupied = False
         self.occupiedBy = None
     
     def __str__(self):
-        if self.isVoid: return f"Void ({self.x},{self.y})"
-        return f"Cell ({self.x},{self.y}) occupied by {self.occupiedBy}"
+        if self.isVoid: return f"Void ({self.y},{self.x})"
+        return f"Cell ({self.y},{self.x}) occupied by {self.occupiedBy}"
+
+
+    def clear(self):
+        self.isOccupied = False
+        self.occupiedBy = None

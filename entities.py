@@ -1,8 +1,12 @@
 from abc import ABC, abstractmethod
 import logging
-import field as f
 import math
 from enum import Enum
+
+if __name__ == "__main__":
+    from field import Field, Cell
+
+
 
 class EntityException(Exception):
     pass
@@ -10,15 +14,34 @@ class EntityException(Exception):
 logger = logging.getLogger(__name__)
 
 class Entity(ABC):
-    def __init__(self):
 
-        self.isPlaced = False
-        self.x = None
-        self.y = None
+    _counter = 0 # used to implement id for included entity
+
+    def __init__(self):
+        self.anchor = None # (y, x) - coords tuple
+        self.cells_occupied = [] # list of cell instances
+        self.rotation = None # is 0, 1, 2, 3
+        self.size = 1
+
+        self.eid = Entity._counter
+        Entity._counter += 1
+
+    @staticmethod
+    def rotation_manage(rotation):
+        rotation = (rotation + 4) % 4
+        dydx = [
+            (0,1), # rotation counterclockwise
+            (1,0), # because (0,0) left upper corner - inverted square coords
+            (0,-1), # computing same with sin/cos will
+            (-1,0) # return same values, but this one more stable
+        ]
+        return (dydx[rotation], rotation)
     
-    @abstractmethod
-    def set_entity(self, x, y):
-        pass
+    def update_state(self, anchor_coords: tuple, occupied_cells: list, rotation: int):
+        self.anchor = anchor_coords
+        self.cells_occupied = occupied_cells
+        self.rotation = rotation
+        logger.info(f"{self} state updated")
 
 
 class ShipStatus(Enum):
@@ -27,7 +50,6 @@ class ShipStatus(Enum):
     DAMAGED = 2
     DESTROYED = 3
     REMOVED = 4
-
 class ShipType(Enum):
     CORVETTE = 1
     FRIGATE = 2
@@ -37,74 +59,27 @@ class ShipType(Enum):
 
 class Ship(Entity):
 
-    _count = 0
-
-
     def __init__(self, size, *, status = ShipStatus.NOTPLACED):
         super().__init__()
-
-        self.rotation = None # can take 0 = right, 1 = up, 2 = left, 3 = down, note that (-1 == 3, 4 == 0)
-        self.anchor = None # (y, x)
         self.size = size
-        self.type = ShipType(size)
-        self.cells_occupied = [] # list of [(x1,y1), (x2,y2)...]
-        self.damage = [] # cells which have damage
-
         self.status = status
-        self.ship_id = Ship._count
-        Ship._count += 1
+        self.type = ShipType(size)
+        self.damage = [] # cells which have damage where 0 is anchor
 
         logger.info(f"{self} created")
+    
+
+    def reserve_coords(self, anchor_coords: tuple, rotation: int):
+
+        dydx, rotation = Entity.rotation_manage(rotation)
+        y0, x0 = anchor_coords
+        # note it returns calculated list of coords AND angle!
+        # i chose dict with goal not to strulle with which index is what
+        return {"coords": [((y0+i*dydx[0]), (x0+i*dydx[1])) for i in range(self.size)], "rotation": rotation}
 
 
-    def set_entity(self, playfield: f.Field, coords: tuple, rotation: int):
-
-        if playfield.cells[coords].isOccupied:
-            logger.error(f"Tried to place {self} on ocuppied Cell{coords}")
-        
-        occupation_cells = self.get_shipTiles(coords, rotation)
-        
-        for cell in occupation_cells:
-
-            if playfield.cell_exists(playfield, cell):
-                tile = playfield.cells[cell]
-                
-                if tile.isOccupied:
-                    msg = f"Tried to place {self} on ocuppied {tile}"
-                    logger.error(msg)
-                    raise EntityException(msg)
-                
-                elif tile.isVoid:
-                    msg = f"Tried to place {self} on void {tile}"
-                    logger.error(msg)
-                    raise EntityException(msg)
-                
-                self.anchor = occupation_cells[0]
-                self.rotation = rotation
-                self.cells_occupied = occupation_cells
-
-                for cell in occupation_cells:
-                    tile = playfield.cells[cell]
-                    tile.isOccupied = True
-                    tile.occupiedBy = self
-                return
-            return EntityException(f"Couldn't place {self} on {coords}")
-
-
-    def get_shipTiles(self, ref_anchor: tuple, ref_angle: int):
-        # reference parameters, can be differ from self ones already stored
-        position = [ref_anchor]
-
-        for i in range(1, self.size):
-            y = ref_anchor[0] + i*round(math.sin(ref_angle * math.pi/2)) # y + dy
-            x = ref_anchor[1] + i*round(math.cos(ref_angle * math.pi/2)) # x + dx
-            position.append((y, x))
-        return position
-
-
-    def __str__(self):
-        return f"{self.type} {self.ship_id} {self.cells_occupied}"
-
+    def __repr__(self):
+        return f"{self.type} {self.eid} {self.status}, a:{self.anchor} r:{self.rotation}"
 
 
 class Space_Object(Entity):

@@ -27,6 +27,7 @@ class Field:
         # field - is a dict of cells
         # where key is their (y, x) tuple
         self._cells = {}
+        self.dimensions = {"height": None, "width": None}
     
 
     @property
@@ -35,6 +36,7 @@ class Field:
 
     def wipe_field(self):
         self._cells = {}
+        self.dimensions = {"height": None, "width": None}
         logger.info(f"{self} wiped.")
 
 
@@ -74,6 +76,7 @@ class Field:
 
 
     def generate_square(self, height: int, width: int):
+        self.dimensions = {"height": height-1, "width": width-1}
         for y in range(height):
             for x in range(width):
                 # there's no point in creating add_cell() since it's only used in this generator

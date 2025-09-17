@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 import logging
-import math
 from enum import Enum
 
 if __name__ == "__main__":
@@ -14,6 +13,19 @@ class EntityException(Exception):
 logger = logging.getLogger(__name__)
 
 class Entity(ABC):
+
+    class Status(Enum):
+        NOTPLACED = 0
+        FULLHEALTH = 1
+        DAMAGED = 2
+        DESTROYED = 3
+        REMOVED = 4
+    class Type(Enum):
+        CORVETTE = 1
+        FRIGATE = 2
+        DESTROYER = 3
+        CRUISER = 4
+        BATTLESHIP = 5
 
     _counter = 0 # used to implement id for included entity
 
@@ -44,30 +56,19 @@ class Entity(ABC):
         logger.info(f"{self} state updated")
 
 
-class ShipStatus(Enum):
-    NOTPLACED = 0
-    FULLHEALTH = 1
-    DAMAGED = 2
-    DESTROYED = 3
-    REMOVED = 4
-class ShipType(Enum):
-    CORVETTE = 1
-    FRIGATE = 2
-    DESTROYER = 3
-    CRUISER = 4
-    BATTLESHIP = 5
+
 
 class Ship(Entity):
 
-    def __init__(self, size, *, status = ShipStatus.NOTPLACED):
+    def __init__(self, size: int, *, status = Entity.Status.NOTPLACED):
         super().__init__()
         self.size = size
         self.status = status
-        self.type = ShipType(size)
+        self.type = Ship.Type(size)
         self.damage = [] # cells which have damage where 0 is anchor
 
         logger.info(f"{self} created")
-    
+
 
     def reserve_coords(self, anchor_coords: tuple, rotation: int):
 
@@ -75,7 +76,7 @@ class Ship(Entity):
         y0, x0 = anchor_coords
         # note it returns calculated list of coords AND angle!
         # i chose dict with goal not to strulle with which index is what
-        return {"coords": [((y0+i*dydx[0]), (x0+i*dydx[1])) for i in range(self.size)], "rotation": rotation}
+        return {"coords": [((y0 + i*dydx[0]), (x0 + i*dydx[1])) for i in range(self.size)], "rotation": rotation}
 
 
     def __repr__(self):

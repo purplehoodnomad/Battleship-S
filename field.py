@@ -76,7 +76,7 @@ class Field:
 
 
     def generate_square(self, height: int, width: int):
-        self.dimensions = {"height": height-1, "width": width-1}
+        self.dimensions = {"height": height, "width": width}
         for y in range(height):
             for x in range(width):
                 # there's no point in creating add_cell() since it's only used in this generator
@@ -133,6 +133,7 @@ class Cell:
         if not(isinstance(y, int) and isinstance(x, int)): raise TypeError("Coordinates must be integers.")
         self.y, self.x = y, x
         self.is_void = is_void
+        self.was_shot = False
         self.occupied_by = None
     
     def __str__(self):

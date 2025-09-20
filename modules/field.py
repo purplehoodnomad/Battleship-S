@@ -1,21 +1,9 @@
 from __future__ import annotations
-
 import logging
-
 
 logger = logging.getLogger(__name__)
 
-
-class FieldException(Exception):
-    pass
-
-# this method used for not to doubling log and throwing exception then
-def raise_logged(e: Exception): 
-    logger.error(str(e))
-    raise e
-
-
-
+class FieldException(Exception): pass
 class Field:
     """
     Generates playfield, manages it.
@@ -24,41 +12,49 @@ class Field:
 
     This class - source of truth of cells' status.
     """
-    def __init__(self, params = None):
+    def __init__(self, shape = None, params = None):
         # field - is a dict of cells
         # where key is their (y, x) tuple
         self._cells = {}
         self.dimensions = {"height": None, "width": None}
-        if params is not None: self.generate_field(params)
-    
+        if shape is not None or params is not None: self.generate_field(shape, params)
 
-    @property
+
     def is_empty(self): return not self._cells
-
 
     def wipe_field(self):
         self._cells = {}
         self.dimensions = {"height": None, "width": None}
         logger.info(f"{self} wiped.")
 
-
     # checks if cell with given (y, x) is part of field
     def cell_exists(self, coords: tuple): return bool(coords) and coords in self._cells
     
 
-    def generate_field(self, params: list) -> None:
+    def generate_field(self, shape: str, params: list) -> None:
         """
-        Gets list of generation parameters, first is always pattern name.
-        All the others are generational parameters. e.g. circle radius.
+        Gets list of shape and generation parameters (width, height, radius etc.)
         This is separate method and not constructor because
         field can be regenerated multiple times without recreating the object itself.
         """
-        match params[0]:
-
-            case "square": return self.generate_square(params[1], params[2])
+        self.wipe_field()
+        
+        match shape:
+            case "rectangle":
+                if len(params) < 2: raise FieldException("No proper rectangle dimensions given.")
+                height, width = int(params[0]), int(params[1])
+                return self.generate_rectangle(height, width)
             case _:
-                raise FieldException(f"{self}: No {params[0]} shaped field implemented.")
-    
+                raise FieldException(f"{self}: No {params[0]} shape field implemented.")
+
+
+    def generate_rectangle(self, height: int, width: int):
+        allowed_sizes = list(range(1, 31))
+        if width not in allowed_sizes or height not in allowed_sizes: raise FieldException("Dimensions must be between 1 and 30")
+        self.dimensions = {"height": height, "width": width}
+        for y in range(height):
+            for x in range(width):
+                self._cells[(y, x)] = Cell(y, x)
 
 
     def get_cell(self, coords: tuple):
@@ -67,24 +63,13 @@ class Field:
         It can return void cell and returns no cell if field is empty.
         It's made to separate responsibility - it just gives what it can.
         """
-        if self.is_empty:
+        if self.is_empty():
             logger.warning(f"{self}: Tried to get cell with no field.")
             return None
-        if not coords:
-            raise_logged(FieldException(f"{self}: Asked for no cells."))
+        if not coords: raise FieldException(f"{self}: Asked for no cells.")
         
-        if self.cell_exists(coords): return self._cells[coords]
-        raise_logged(FieldException(f"{self}: Requested Cell {coords} does not exist."))
-
-
-    def generate_square(self, height: int, width: int):
-        self.dimensions = {"height": height, "width": width}
-        for y in range(height):
-            for x in range(width):
-                # there's no point in creating add_cell() since it's only used in this generator
-                # that's why it's changing _cells directly
-                self._cells[(y, x)] = Cell(y, x)
-                logger.debug(f"{self}: {self.get_cell((y, x))} - is generated.")
+        try: return self._cells[coords]
+        except: raise FieldException(f"{self}: Requested Cell {coords} does not exist.")
     
 
     def occupy_cells(self, entity: Entity, anchor_coords: tuple, rotation: int):
@@ -140,8 +125,6 @@ class Field:
             return neighbours        
             
 
-
-
 class Cell:
     """
     Smallest field unit.
@@ -160,7 +143,7 @@ class Cell:
         return f"Cell ({self.y},{self.x})"
     
     def __repr__(self):
-        return f"Cell(y={self.y}, x={self.x}, is_void={self.is_void}, occupied_by={self.occupied_by})"
+        return f"Cell({self.y},{self.x}) is_void={self.is_void}, is_shot={self.is_void})"
 
     def free(self):
         self.occupied_by = None

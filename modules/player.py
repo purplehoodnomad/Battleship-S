@@ -15,8 +15,6 @@ class Player:
 
         if not name or name is None: raise PlayerException("Give me a name!")
         else: self.name = str(name)
-        self.field = None
-        self.colorize(color)
 
         # list of entities which are must be set before game starts
         self.pending_entities = {}
@@ -25,6 +23,9 @@ class Player:
         del self.pending_entities[Entity.Type.UNIDENTIFIED]
 
         self.entities = {} # actual set entities {Entity.eid: Entity}
+
+        self.field = None
+        self.colorize(color)
 
         logger.info(f"{self} created")
     

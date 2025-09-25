@@ -181,8 +181,8 @@ class CLIRenderer:
         """
         if not name: self.talker.talk(f"Give player a name")
         else:
-            player = self.game.set_player(name, color)
-            self.talker.talk(f"Player <{self.term.paint(player.name, player.color)}> was created")
+            meta = self.game.set_player(name, color)
+            self.talker.talk(f"Player <{self.term.paint(meta["name"], meta["color"])}> was created")
 
     def get_players(self):
         """

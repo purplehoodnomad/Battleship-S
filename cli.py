@@ -254,12 +254,30 @@ class CLIRenderer:
         self.game.ready()
         self.talker.talk(self.term.paint("Setup state is running. Use `set` to place your ships.", "orange"), loud = True)
 
-    def place_entity(self, name: str, etype: str, y: str, x: str, rot: str):
-        coords = (int(y) - 1, ord(x) - ord("A"))
+    def place_entity(self, name: str, etype: str, icoords: str, rot: str):
+
+        coords = self.convert_input(icoords)
+        
         etype, rot = int(etype), int(rot)
         self.game.place_entity(name, etype, coords, rot)
         meta = self.game.get_player_meta(name)
         self.talker.talk(f"<{self.term.paint(name, meta["color"])}> placed entity sucsessfully")
+    
+
+    def convert_input(self, coords: str):
+        """
+        Converts human input to game expected parameters.
+        E.g. A10 to (9, 0); J2 to (3, 9)
+        """
+        Y_coord, X_coord = None, None
+        for i in range (26):
+            letter = chr(i + ord("A"))
+            if coords[0] == letter:
+                X_coord = ord(letter) - ord("A")
+                Y_coord = int(coords.replace(letter, "")) - 1
+                break
+        if X_coord is None: raise ValueError("Coordinates must be in 'C10' format")
+        return (Y_coord, X_coord)
 
     
 
@@ -366,9 +384,9 @@ def ready(self):
     self.r.proceed_to_setup()
     self.upd()
 
-@CLIIO.command(help_info = "Place entity: place <name> <etype> <tile> <rot>")
-def place(self, name, etype, y, x, rot):
-    self.r.place_entity(name, etype, y, x, rot)
+@CLIIO.command(help_info = "Place entity: place <name> <etype> <coords> <rot>")
+def place(self, name, etype, coords, rot):
+    self.r.place_entity(name, etype, coords, rot)
     self.upd()
 
 

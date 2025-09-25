@@ -1,90 +1,111 @@
 from __future__ import annotations
-
-from abc import ABC, abstractmethod
 import logging
 from enum import Enum
 
 
-
-class EntityException(Exception):
-    pass
-
 logger = logging.getLogger(__name__)
 
-class Entity(ABC):
 
+class EntityException(Exception): pass
+class Entity:
     class Status(Enum):
         NOTPLACED = 0
         FULLHEALTH = 1
         DAMAGED = 2
         DESTROYED = 3
-        REMOVED = 4
     class Type(Enum):
-        UNINDENTIFIED = 0
+        UNIDENTIFIED = 0
         CORVETTE = 1
         FRIGATE = 2
         DESTROYER = 3
         CRUISER = 4
-        BATTLESHIP = 5
-        RELAY = 11
-        PLANET = 21
+        # BATTLESHIP = 5
+        # RELAY = 11
+        # PLANET = 21
 
-    _counter = 0 # used to implement id for included entity
-
+    _counter = 0 # used to implement entity ids
     def __init__(self):
-        self.anchor = None # (y, x) - coords tuple
-        self.cells_occupied = [] # list of cell coords
-        self.rotation = None # is 0, 1, 2, 3
+        # geometry and positioning
+        self.anchor: tuple = None # (y, x)
         self.size = 1
-        self.type = self.Type.UNINDENTIFIED
+        self.rotation: int = None # 0, 1, 2, 3
+        # reference attributes
+        self.cells_occupied = [] # list of cell coords
+        self.cells_damaged = set() # cells which have damage where 0 is anchor
+
+        # state and identification
+        self.type = self.Type.UNIDENTIFIED
+        self.status = self.Status.NOTPLACED
+        # metadata
         self.eid = Entity._counter
         Entity._counter += 1
 
-    @staticmethod
-    def rotation_manage(rotation):
-        rotation = (rotation + 4) % 4
-        dydx = [
-            (0,1), # rotation counterclockwise
-            (1,0), # because (0,0) left upper corner - inverted square coords
-            (0,-1), # computing same with sin/cos will
-            (-1,0) # return same values, but this one more stable
-        ]
-        return (dydx[rotation], rotation)
-    
-    def update_state(self, anchor_coords: tuple, occupied_cells: list, rotation: int):
-        self.anchor = anchor_coords
-        self.cells_occupied = occupied_cells
-        self.rotation = rotation
+
+    def update_state(self, *, anchor_coords: tuple, occupied_cells: list, rotation: int, status: int) -> None:
+        """
+        Syncronizes self state with data given by Field
+        Updates only given parameters
+        """
+        if anchor_coords is not None: self.anchor = anchor_coords
+        if occupied_cells is not None: self.cells_occupied = occupied_cells
+        if rotation is not None: self.rotation = rotation
+        if status is not None: self.status = self.Status(status)
         logger.info(f"{self} state updated")
 
+
+    def make_damage(self, coords: tuple) -> None:
+        # Field desided that there's entity so cells_occupied MUST contain coords
+        damaged_tile = self.cells_occupied.index(coords)
+        self.cells_damaged.add(damaged_tile)
+
+        if self.size == len(self.cells_damaged): self.status = self.Status.DESTROYED
+        else: self.status = self.Status.DAMAGED
+        logger.debug(f"{self} state changed")
+
+
+    @staticmethod
+    def rotation_manage(rotation) -> tuple:
+        """
+        Rotation is counterclockwise because (0,0) is a left upper corner of the field - inverted square coords
+        Computing same with sin/cos would result same values, but this one more stable
+        """
+        rotation = (rotation + 4) % 4
+        dydx = [
+            (0,1),  # right
+            (1,0),  # down
+            (0,-1), # left
+            (-1,0)  # up
+        ]
+        return (dydx[rotation], rotation)
 
 
 
 class Ship(Entity):
-
-    def __init__(self, size: int, *, status = Entity.Status.NOTPLACED):
+    """
+    Main entity in the game
+    Can be placed next to the wfield border
+    Can't be placed next to other ships
+    """
+    def __init__(self, size: int):
         super().__init__()
         self.size = size
-        self.status = status
         self.type = Entity.Type(size)
-        self.damage = [] # cells which have damage where 0 is anchor
-
         logger.info(f"{self} created")
 
-
-    def reserve_coords(self, anchor_coords: tuple, rotation: int):
+    def reserve_coords(self, anchor_coords: tuple, rotation: int) -> dict:
 
         dydx, rotation = Entity.rotation_manage(rotation)
         y0, x0 = anchor_coords
-        # note it returns calculated list of coords AND angle!
-        # i chose dict with goal not to struggle with which index is what
+        # note that returns calculated list of coords AND angle!
+        # dcit was chosen with goal not to struggle with which index is what
         return {"coords": [((y0 + i*dydx[0]), (x0 + i*dydx[1])) for i in range(self.size)], "rotation": rotation}
-                    
 
-                
+    def __str__(self):
+        type_name = str(self.type).replace('Type.', '').capitalize()
+        return f"{type_name}-{self.eid}"
 
     def __repr__(self):
-        return f"{self.type} {self.eid} {self.status}, a:{self.anchor} r:{self.rotation}"
+        return f"eid={self.eid} {self.type} {self.status}, a={self.anchor} r={self.rotation}"
 
 
 class Space_Object(Entity):

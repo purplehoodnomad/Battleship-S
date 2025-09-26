@@ -18,6 +18,7 @@ class CLIIO:
         self.talker = self.r.talker
         self.upd = self.r.update_screen
         self.upd()
+        self.game_active = False
 
         self.arrow = f"{self.term.move_yx(self.term.height-3, 0)}{self.term.paint('>> ', 'green')}"
     commands = {}
@@ -25,6 +26,10 @@ class CLIIO:
     
     def run(self):
         while True:
+            if self.game_active:
+                # TODO bot tries to move if it's turn
+                pass
+
             try:
                 line = input(self.arrow).strip()
                 if not line: continue
@@ -123,6 +128,7 @@ def apl(self, name):
 @CLIIO.command(help_info = "Proceeds to actual playing the game: start")
 def start(self):
     self.r.start()
+    self.game_active = True
     self.upd()
 
 @CLIIO.command(help_info = "Proceeds to actual playing the game: start")

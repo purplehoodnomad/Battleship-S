@@ -127,22 +127,8 @@ class CLIRenderer:
         """
         Autoplaces all remain ships
         """
-        player = self.game.get_player(name)
-        for entity, amount in player.pending_entities.items().__reversed__(): # starts with big ones first
-            if amount == 0: continue
-            counter = 0
-            for _ in range(amount):
-                success = False
-                while not success:
-                    if counter >= 50000: raise ValueError("Unable to autoplace entities - Too many iterations")
-                    counter += 1
-                    try:
-                        y = random.randint(0, player.field.dimensions["height"] - 1)
-                        x = random.randint(0, player.field.dimensions["width"] - 1) 
-                        rot = random.randint(0, 3)
-                        self.game.place_entity(name, entity.value, (y, x), rot)
-                        success = True
-                    except Exception: continue
+        self.game.autoplace(name)
+        self.talker.talk(f"Autoplaced ships for <{name}>")
 
 
     def convert_input(self, coords: str):

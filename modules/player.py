@@ -11,7 +11,7 @@ class Player:
     """
     Stores all methods and instances that player can have.
     """
-    def __init__(self, name = None, color = "white"):
+    def __init__(self, name = None, color = "white", ai = False):
 
         if not name or name is None: raise PlayerException("Give me a name!")
         else: self.name = str(name)
@@ -26,6 +26,7 @@ class Player:
 
         self.field = None
         self.colorize(color)
+        self.is_ai = ai
 
         logger.info(f"{self} created")
     
@@ -68,6 +69,24 @@ class Player:
         previous = entity.cells_occupied
         self.field.occupy_cells(entity, coords, rot)
         logger.info(f"{self} moved replaced {entity} from {previous} to {entity.cells_occupied}")
+
+    
+    def normalize_eids(self) -> dict:
+        """
+        Placing ships wrong creates a lot of gc instances
+        This method brings eid back to numeration from 0
+        """
+        counter = 0
+        normilized_entities = {}
+        for entity in self.entities.values():
+            entity.eid = counter
+            normilized_entities[counter] = entity
+            counter += 1
+            logger.info(f"Normalization: {entity}")
+        
+        self.entities = normilized_entities
+        Entity._counter = counter + 1
+        return self.entities
 
     
     def set_field(self, shape: str, params: list) -> None:

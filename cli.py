@@ -2,6 +2,7 @@ from __future__ import annotations
 from blessed import Terminal
 from functools import partial
 from modules.game import Game
+import random
 
 
 
@@ -264,6 +265,29 @@ class CLIRenderer:
         self.talker.talk(f"<{self.term.paint(name, meta["color"])}> placed entity sucsessfully")
     
 
+    def autoplace(self, name: str):
+        """
+        Autoplaces all remain ships
+        """
+        player = self.game.get_player(name)
+        for entity, amount in player.pending_entities.items().__reversed__(): # starts with big ones first
+            if amount == 0: continue
+            counter = 0
+            for _ in range(amount):
+                success = False
+                while not success:
+                    if counter >= 50000: raise ValueError("Unable to autoplace entities - Too many iterations")
+                    counter += 1
+                    try:
+                        y = random.randint(0, player.field.dimensions["height"] - 1)
+                        x = random.randint(0, player.field.dimensions["width"] - 1) 
+                        rot = random.randint(0, 3)
+                        self.game.place_entity(name, entity.value, (y, x), rot)
+                        success = True
+                    except Exception: continue
+
+    
+
     def convert_input(self, coords: str):
         """
         Converts human input to game expected parameters.
@@ -393,7 +417,6 @@ def place(self, name, etype, coords, rot):
 
 @CLIIO.command(help_info = "Quick start game: q")
 def q(self):
-    import random
     self.__init__()
     colors = list(self.term.colors.keys())
     random.shuffle(colors)
@@ -401,18 +424,24 @@ def q(self):
     color1, color2 = colors[:2]
 
     # создаём игроков
-    self.r.set_player("nhk", color1)
-    self.r.set_player("loner", color2)
+    name1 = "nhk"
+    name2 = "loner"
+    self.r.set_player(name1, color1)
+    self.r.set_player(name2, color2)
 
     # случайные размеры полей
-    for name in ["nhk", "loner"]:
-        width = random.randint(7, 26)
-        height = random.randint(7, 26)
+    for name in [name1, name2]:
+        width = random.randint(9, 26)
+        height = random.randint(9, 26)
         # пусть всегда прямоугольник
         self.r.set_player_field(name, "1", (height, width))
         self.r.game.get_player(name).pending_entities = self.r.game.default_entities.copy()
     
     self.r.get_players()
+    self.r.proceed_to_setup()
+    self.upd()
+    for name in (name1, name2):
+        self.r.autoplace(name)
     self.upd()
 
 if __name__ == "__main__":

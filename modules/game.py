@@ -46,7 +46,7 @@ class Game:
         return self.order[(self.turn) % len(self.order)]
        
 
-    def set_player(self, name: str, color: str) -> dict:
+    def set_player(self, name: str, color: str, ai: bool) -> dict:
         """
         Returns created player metadata. Names are unique identificators.
         """
@@ -55,7 +55,7 @@ class Game:
         if len(self._players) >= 2: raise GameException("Game supports 2 players only.")
         
         if str(name) in self._players: name = str(uuid.uuid4())[:3] # guarantees unique names
-        player = Player(name[:10], color) # slices player name for more convenient readable size
+        player = Player(name[:10], color, ai) # slices player name for more convenient readable size
         
         self._players[player.name] = player
         self.order.append(player.name)
@@ -99,6 +99,7 @@ class Game:
             "name": player.name,
             "color": player.color,
             "order": self.order.index(player.name),
+            "is_ai": player.is_ai,
             "pending": {} # dict if pending entities
         }
         for etype, amount in player.pending_entities.items():
@@ -188,6 +189,42 @@ class Game:
         self.check_state(self.State.SETUP)
         player = self.get_player(name)
         player.place_entity(entity, coords, rot)
+    
+
+    def autoplace(self, name: str):
+        """
+        Autoplaces all remain ships
+        """
+        import random
+        player = self.get_player(name)
+        for entity, amount in player.pending_entities.items().__reversed__(): # starts with big ones first
+            if amount == 0: continue
+            counter = 0
+            for _ in range(amount):
+                success = False
+                while not success:
+                    if counter >= 50000: raise ValueError("Unable to autoplace entities - Too many iterations")
+                    counter += 1
+                    try:
+                        y = random.randint(0, player.field.dimensions["height"] - 1)
+                        x = random.randint(0, player.field.dimensions["width"] - 1) 
+                        rot = random.randint(0, 3)
+                        self.place_entity(name, entity.value, (y, x), rot)
+                        success = True
+                    except Exception: continue
+        player.normalize_eids()
+    
+
+    def normalize_eids(self) -> None:
+        """
+        Placing wrong creates a lot of gc instances
+        This method brings eid back to numeration from 0
+        """
+        if not self._players: raise GameException("Unable to normalize eids: No players")
+        for player in self._players.values():
+            player.normalize_eids()
+
+
 
 
     def check_state(self, state: Game.State) -> None:

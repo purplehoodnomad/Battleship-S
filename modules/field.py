@@ -147,11 +147,11 @@ class Field:
         cell.was_shot = True
         occupator = cell.occupied_by
         occupator.make_damage(coords)
-        if occupator.status.value() == 3: # 3 = Entity.Type.DESTROYED
+        if occupator.status.value == 3: # 3 = Entity.Type.DESTROYED
             # filling all nearby as was_shot
             for close_coords in self.neighbours(occupator.cells_occupied):
                 self.get_cell(close_coords).was_shot = True
-                logger.info(f"{self}: {cell} marked as shot")
+                logger.info(f"{self}: {close_coords} marked as shot")
             return "destroyed"
         logger.info(f"{self}: {cell} was shot")
         return "hit"
@@ -190,7 +190,7 @@ class Cell:
         return f"cell({self.y},{self.x},{state})"
     
     def __repr__(self):
-        return f"Cell({self.y},{self.x}) is_void={self.is_void}, is_shot={self.is_shot})"
+        return f"Cell({self.y},{self.x}) is_void={self.is_void}, was_shot={self.was_shot})"
 
     def free(self):
         self.occupied_by = None

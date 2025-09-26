@@ -34,7 +34,7 @@ class Game:
         self.id = "game_" + str(uuid.uuid4())[:6]
         self._players = {}
         self.order = [] # order of turns ("name")
-        self.turn = 1
+        self.turn = 0
         self.state = self.State.LOBBY
 
 
@@ -42,7 +42,8 @@ class Game:
         """
         Converts current turn into index and returns name of player.
         """
-        return self.order[(self.turn) % len(self._players)]
+        if not self.order: raise GameException("Order is empty. No players set")
+        return self.order[(self.turn) % len(self.order)]
        
 
     def set_player(self, name: str, color: str) -> dict:
@@ -138,11 +139,12 @@ class Game:
         self.check_state(self.State.ACTIVE)
         # checks if shooter and target exist
         shooter, victim = self.get_player(shooter_name), self.get_player(victim_name)
-        if self.whos_turn() != shooter_name: raise GameException(f"{shooter_name} cant shoot now, it's {self.whos_turn}'s turn")
+        if self.whos_turn() != shooter_name: raise GameException(f"{shooter_name} cant shoot now, it's {self.whos_turn()}'s turn")
         
         result = victim.take_shot(coords)
+        if result == "hit" or result == "destroyed": return result
         self.turn += 1
-        return result
+        
         
 
     def change_player_field(self, name: str, shape: str, params: list) -> None:
@@ -167,6 +169,18 @@ class Game:
 
         self.state = self.State.SETUP
         logger.info(f"{self}: state has changed. Players must place ships")
+
+
+    def start(self) -> None:
+        self.check_state(self.State.SETUP)
+
+        for player in self._players.values():
+            if len(player.entities.values()) == 0: raise GameException(f"{player} doesn't have any placed entities")
+            for amount_unplaced in player.pending_entities.values():
+                if amount_unplaced != 0: raise GameException(f"{player} hasn't placed all their entities")
+        
+        self.state = self.State.ACTIVE
+        logger.info(f"{self}: state has changed. Turn {self.turn} - {self.whos_turn()} shoots")
 
 
     def place_entity(self, name: str, entity: int, coords: tuple, rot: int) -> None:

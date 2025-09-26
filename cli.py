@@ -168,7 +168,7 @@ class CLIRenderer:
             self.p1_field.cells = self.game.get_player_field(names[0], private = True)
             screen += self.p1_field.draw()
         if self.p2_field is not None:
-            self.p2_field.cells = self.game.get_player_field(names[1], private = True)
+            self.p2_field.cells = self.game.get_player_field(names[1], private = False)
             screen += self.p2_field.draw()
         screen += self.drawer.draw_separator()
         screen += self.talker.talk()
@@ -253,7 +253,7 @@ class CLIRenderer:
     
     def proceed_to_setup(self):
         self.game.ready()
-        self.talker.talk(self.term.paint("Setup state is running. Use `set` to place your ships.", "orange"), loud = True)
+        self.talker.talk(self.term.paint("Setup state is running. Use `place` to place your ships.", "orange"), loud = True)
 
     def place_entity(self, name: str, etype: str, icoords: str, rot: str):
 
@@ -286,7 +286,6 @@ class CLIRenderer:
                         success = True
                     except Exception: continue
 
-    
 
     def convert_input(self, coords: str):
         """
@@ -300,8 +299,18 @@ class CLIRenderer:
                 X_coord = ord(letter) - ord("A")
                 Y_coord = int(coords.replace(letter, "")) - 1
                 break
-        if X_coord is None: raise ValueError("Coordinates must be in 'C10' format")
+        if X_coord is None: raise ValueError("Coordinates must be in 'CRR' format")
         return (Y_coord, X_coord)
+    
+
+    def start(self):
+        self.game.start()
+        self.talker.talk(self.term.paint("Game started. Use `sh` to shoot.", "blue"), loud = True)
+
+    
+    def shoot(self, shooter, target, coords):
+        result = self.game.shoot(shooter, target, self.convert_input(coords))
+        self.talker.talk(f"{shooter} shot {coords}. Result - {result}")
 
     
 
@@ -313,7 +322,7 @@ class CLIIO:
     """
     def __init__(self):
         self.term = STerminal()
-        self.r = CLIRenderer(self.term)
+        self.r: CLIRenderer = CLIRenderer(self.term)
         self.talker = self.r.talker
         self.upd = self.r.update_screen
         self.upd()
@@ -413,6 +422,21 @@ def place(self, name, etype, coords, rot):
     self.r.place_entity(name, etype, coords, rot)
     self.upd()
 
+@CLIIO.command(help_info = "Autoplaces remaining entities: apl <name>")
+def apl(self, name):
+    self.r.autoplace(name)
+    self.upd()
+
+@CLIIO.command(help_info = "Proceeds to actual playing the game: start")
+def start(self):
+    self.r.start()
+    self.upd()
+
+@CLIIO.command(help_info = "Proceeds to actual playing the game: start")
+def sh(self, shooter, target, coords):
+    self.r.shoot(shooter, target, coords)
+    self.upd()
+
 
 
 @CLIIO.command(help_info = "Quick start game: q")
@@ -431,17 +455,17 @@ def q(self):
 
     # случайные размеры полей
     for name in [name1, name2]:
-        width = random.randint(9, 26)
-        height = random.randint(9, 26)
+        width = 10 # random.randint(9, 26)
+        height = 10 # random.randint(9, 26)
         # пусть всегда прямоугольник
         self.r.set_player_field(name, "1", (height, width))
         self.r.game.get_player(name).pending_entities = self.r.game.default_entities.copy()
     
     self.r.get_players()
     self.r.proceed_to_setup()
-    self.upd()
     for name in (name1, name2):
         self.r.autoplace(name)
+    self.r.start()
     self.upd()
 
 if __name__ == "__main__":

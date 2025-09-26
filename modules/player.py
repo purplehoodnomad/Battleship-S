@@ -106,7 +106,7 @@ class Player:
         return self.field.take_shot(coords)
 
 
-    def str(self):
+    def __str__(self):
         return f"Player {self.name}"
     
     def __repr__(self):

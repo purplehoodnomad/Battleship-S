@@ -11,7 +11,7 @@ class Player:
     """
     Stores all methods and instances that player can have.
     """
-    def __init__(self, name = None, color = "white", ai = False):
+    def __init__(self, name = None, color = "white"):
 
         if not name or name is None: raise PlayerException("Give me a name!")
         else: self.name = str(name)
@@ -26,7 +26,7 @@ class Player:
 
         self.field = None
         self.colorize(color)
-        self.is_ai = ai
+        self.is_ai = False
 
         logger.info(f"{self} created")
     

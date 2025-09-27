@@ -5,6 +5,7 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from modules.game import Game
+from modules.bots import Randomer, Hunter
 
 
 class CLIRenderer:
@@ -15,6 +16,7 @@ class CLIRenderer:
         self.drawer = CLIDrawer(term)
         self.p1_field: CLIField = None
         self.p2_field: CLIField = None
+        self.bots = {} # {playername: BotType}
     
 
     def update_screen(self):
@@ -33,15 +35,16 @@ class CLIRenderer:
         self.term.fl(screen)
 
 
-    def set_player(self, name: str, color: str, ai = False):
+    def set_player(self, name: str, color: str, ai = None):
         """
         Tries to add Player instance to Game.
         Prints result.
         """
-        if not name: self.talker.talk(f"Give player a name")
-        else:
-            meta = self.game.set_player(name, color, ai)
-            self.talker.talk(f"Player <{self.term.paint(meta["name"], meta["color"])}> was created")
+        meta = self.game.set_player(name, color)
+        if ai is not None:
+            if ai == "randomer": self.bots[name] = Randomer(name, self.game)
+            else: self.bots[name] = Hunter(name, self.game)
+        self.talker.talk(f"Player <{self.term.paint(meta["name"], meta["color"])}> was created")
 
     def get_players(self):
         """
@@ -69,6 +72,8 @@ class CLIRenderer:
             self.p1_field = self.p2_field
             self.p1_field.x0 = 0
         self.p2_field = None
+        try: del self.bots[name]
+        except KeyError: pass
         self.talker.talk(f"Player <{self.term.paint(meta['name'], meta['color'])}> deleted")
 
     def color(self, name: str, color: str):
@@ -139,7 +144,7 @@ class CLIRenderer:
         Y_coord, X_coord = None, None
         for i in range (26):
             letter = chr(i + ord("A"))
-            if coords[0] == letter:
+            if coords.upper()[0] == letter:
                 X_coord = ord(letter) - ord("A")
                 Y_coord = int(coords.replace(letter, "")) - 1
                 break

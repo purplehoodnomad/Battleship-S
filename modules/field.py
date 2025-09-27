@@ -116,7 +116,7 @@ class Field:
             """
             Returns all potential coordinates of cells near the entity
             """
-            if coord_list is None or not isinstance(coord_list, list): raise FieldException(f"{self} requires proper (y, x) list")
+            if coord_list is None or not isinstance(coord_list, list): raise FieldException(f"Getting neighbours requires proper (y, x) list")
             
             neighbours = set()
             for y, x in coord_list:

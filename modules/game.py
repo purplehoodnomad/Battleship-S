@@ -46,7 +46,7 @@ class Game:
         return self.order[(self.turn) % len(self.order)]
        
 
-    def set_player(self, name: str, color: str, ai: bool) -> dict:
+    def set_player(self, name: str, color: str) -> dict:
         """
         Returns created player metadata. Names are unique identificators.
         """
@@ -55,7 +55,7 @@ class Game:
         if len(self._players) >= 2: raise GameException("Game supports 2 players only.")
         
         if str(name) in self._players: name = str(uuid.uuid4())[:3] # guarantees unique names
-        player = Player(name[:10], color, ai) # slices player name for more convenient readable size
+        player = Player(name[:10], color) # slices player name for more convenient readable size
         
         self._players[player.name] = player
         self.order.append(player.name)
@@ -145,6 +145,7 @@ class Game:
         result = victim.take_shot(coords)
         if result == "hit" or result == "destroyed": return result
         self.turn += 1
+        return result
         
         
 

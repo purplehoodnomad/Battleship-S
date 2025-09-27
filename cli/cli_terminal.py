@@ -87,7 +87,7 @@ class CLIField:
                 match self.cells[(y, x)]:
                     case "void":    symb = " "
                     case "free":    symb = "."
-                    case "miss":    symb = "•"
+                    case "miss":    symb =  self.term.paint("o", "white", side=True)
                     case "object":  symb = self.term.paint("■", self.color)
                     case "hit":     symb = self.term.paint("X", self.color, side=True)
                 output += self.term.move_yx(y_now + y, x_now+3 + x*2) + symb
@@ -125,19 +125,21 @@ class CLITalker:
         self.term = term
         self.y0 = CLIField.FIELD_SIZE_Y + 1
         self.x0 = 0
-        self.history = ["", "", ""]
+        self.history = ["", "", "", "", "", "", "", "", ""]
     
     def talk(self, text = "", loud = False):
         """
         Always returns console update string, but it can be just not used when no need to
         """
         if text:
-            self.history[0] = self.history[1]
-            self.history[1] = self.history[2]
-            self.history[2] = str(text)
+            text = str(text)
+            for i in range(1, len(self.history)):
+                self.history[i-1] = self.history[i]
+            self.history[-1] = text
         
         if loud and text:
-            self.history = ["", "", text]
+            self.history = ["" for _ in self.history]
+            self.history[-1] = text
 
         output = self.term.move_yx(self.y0, self.x0) + "\n".join(self.history)
         return output.strip()

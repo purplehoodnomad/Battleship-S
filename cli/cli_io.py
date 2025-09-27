@@ -24,11 +24,15 @@ class CLIIO:
     commands = {}
 
     
-    def run(self):
+    def run(self): 
         while True:
-            if self.game_active:
-                # TODO bot tries to move if it's turn
-                pass
+            if self.game_active and self.r.bots:
+                for name, bot in self.r.bots.items():
+                    if name == self.r.game.whos_turn():
+                        output = bot.shoot()
+                        self.talker.talk(output)
+                self.upd()
+                
 
             try:
                 line = input(self.arrow).strip()
@@ -70,9 +74,8 @@ class CLIIO:
         return wrapper
 
 @CLIIO.command(help_info = "Add a new player: add <name> <color> <ai>")
-def add(self, name, color = "white", *args):
-    ai_flag = bool(args)
-    self.r.set_player(name, color, ai_flag)
+def add(self, name, color = "white", ai_type = None):
+    self.r.set_player(name, color, ai_type)
     self.upd()
 
 @CLIIO.command(help_info = "Print player list: players")
@@ -147,15 +150,15 @@ def q(self):
     color1, color2 = colors[:2]
 
     # создаём игроков
-    name1 = "nhk"
-    name2 = "loner"
-    self.r.set_player(name1, color1)
-    self.r.set_player(name2, color2, True)
+    name1 = "randomer"
+    name2 = "hunter"
+    self.r.set_player(name1, color1, "randomer")
+    self.r.set_player(name2, color2, "hunter")
 
     # случайные размеры полей
     for name in [name1, name2]:
-        width = 10 # random.randint(9, 26)
-        height = 10 # random.randint(9, 26)
+        width = 16 # random.randint(9, 26)
+        height = 16 # random.randint(9, 26)
         # пусть всегда прямоугольник
         self.r.set_player_field(name, "1", (height, width))
         self.r.game.get_player(name).pending_entities = self.r.game.default_entities.copy()
@@ -164,6 +167,7 @@ def q(self):
     self.r.proceed_to_setup()
     for name in (name1, name2):
         self.r.autoplace(name)
+    self.game_active = True
     self.r.start()
     self.upd()
 

@@ -85,6 +85,7 @@ class Randomer(Bot):
 
             if result == "hit" or result == "destroyed": output += "\n" + self.shoot()
             return output
+        else: return ""
 
 
 class Hunter(Bot):
@@ -128,3 +129,4 @@ class Hunter(Bot):
                 self.hunt_validation() # validates all of the neighbours after addition
                 output += "\n" + self.shoot()
             return output
+        else: return ""

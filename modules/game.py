@@ -143,7 +143,10 @@ class Game:
         if self.whos_turn() != shooter_name: raise GameException(f"{shooter_name} cant shoot now, it's {self.whos_turn()}'s turn")
         
         result = victim.take_shot(coords)
-        if result == "hit" or result == "destroyed": return result
+        if result == "hit": return result
+        elif result == "destroyed":
+            if all(Entity.Status.DESTROYED == entity.status for entity in victim.entities.values()):
+                self.state = self.State.OVER
         self.turn += 1
         return result
         

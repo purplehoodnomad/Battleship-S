@@ -24,14 +24,27 @@ class CLIRenderer:
         screen += self.drawer.wipe_screen()
         try: names = self.game.get_player_names()
         except: pass
+
+        winner = self.game.whos_winner()
+        show_ships = winner is not None
+
         if self.p1_field is not None:
-            self.p1_field.cells = self.game.get_player_field(names[0], private = True)
+            if names[0] not in self.bots: show_player_ships = True
+            else: show_player_ships = show_ships
+            self.p1_field.cells = self.game.get_player_field(names[0], private = show_player_ships)
             screen += self.p1_field.draw()
+       
         if self.p2_field is not None:
-            self.p2_field.cells = self.game.get_player_field(names[1], private = True)
+            if names[1] not in self.bots: show_player_ships = True
+            else: show_player_ships = show_ships
+            self.p2_field.cells = self.game.get_player_field(names[1], private = show_player_ships)
             screen += self.p2_field.draw()
         screen += self.drawer.draw_separator()
         screen += self.talker.talk()
+
+        if winner is not None:
+            screen += self.talker.show_winner(winner)
+        
         self.term.fl(screen)
 
 

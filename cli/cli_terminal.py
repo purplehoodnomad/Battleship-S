@@ -114,7 +114,6 @@ class CLIDrawer:
         title = self.term.move_yx(CLIField.FIELD_SIZE_Y, CLIField.FIELD_SIZE_X * 2 + 6) + r"→ Battleship-S ←" # r"⚝ 𝗕𝗮𝘁𝘁𝗹𝗲𝘀𝗵𝗶𝗽-𝗦 ⚝"
 
         return horizontal + vertical + self.term.paint(title, "white", side=False)      
-    
 
     def wipe_screen(self):
         return self.term.move_yx(0, 0) + self.term.clear
@@ -143,3 +142,17 @@ class CLITalker:
 
         output = self.term.move_yx(self.y0, self.x0) + "\n".join(self.history)
         return output.strip()
+    
+    def show_winner(self, name: str):
+        output = self.term.move_yx(self.y0, self.x0) + self.term.clear_eos
+        lines = (
+            "╔═══════════════╗",
+            "║     Winner    ║",
+            "╠═══════════════╣",
+           f"║    {name:<9}  ║",
+            "╚═══════════════╝"
+        )
+        output += self.term.move_yx(self.y0, self.x0)
+        for line in lines:
+            output += line + "\n"
+        return output + "game is over - type `exit` or `restart`"

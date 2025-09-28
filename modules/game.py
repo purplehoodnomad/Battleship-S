@@ -36,6 +36,7 @@ class Game:
         self.order = [] # order of turns ("name")
         self.turn = 0
         self.state = self.State.LOBBY
+        self.winner = None
 
 
     def whos_turn(self) -> str:
@@ -147,6 +148,7 @@ class Game:
         elif result == "destroyed":
             if all(Entity.Status.DESTROYED == entity.status for entity in victim.entities.values()):
                 self.state = self.State.OVER
+                self.winner = shooter.name
         self.turn += 1
         return result
         
@@ -229,7 +231,11 @@ class Game:
             player.normalize_eids()
 
 
-
+    def whos_winner(self):
+        try:
+            self.check_state(self.State.OVER)
+            return self.winner
+        except GameException: return
 
     def check_state(self, state: Game.State) -> None:
         """

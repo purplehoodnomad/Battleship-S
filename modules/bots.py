@@ -77,7 +77,7 @@ class Randomer(Bot):
         target = self.get_opponent()
         shot_available = self.get_free_coords()
 
-        if self.player.name == self.game.whos_turn():
+        if self.player.name == self.game.whos_turn() and self.game.state != self.game.State.OVER:
             coords = random.choice(shot_available)
 
             result = self.game.shoot(self.player.name, target.name, coords)
@@ -116,7 +116,7 @@ class Hunter(Bot):
         if not self.hunt: shot_available = self.get_free_coords()
         else: shot_available = list(self.hunt)
 
-        if self.player.name == self.game.whos_turn():
+        if self.player.name == self.game.whos_turn() and self.game.state != self.game.State.OVER:
             coords = random.choice(shot_available)
 
             result = self.game.shoot(self.player.name, target.name, coords)

@@ -136,12 +136,17 @@ class Game:
         return player.get_field(private=private)
     
 
-    def shoot(self, shooter_name: str, victim_name: str, coords: tuple) -> str:
+    def shoot(self, shooter_name: str, coords: tuple) -> str:
 
         self.check_state(self.State.ACTIVE)
-        # checks if shooter and target exist
-        shooter, victim = self.get_player(shooter_name), self.get_player(victim_name)
+        shooter = self.get_player(shooter_name)
         if self.whos_turn() != shooter_name: raise GameException(f"{shooter_name} cant shoot now, it's {self.whos_turn()}'s turn")
+
+        # getting opponent's instance
+        names = self.get_player_names()
+        if len(names) != 2: raise GameException(f"Can't get opponent of {shooter_name}, player count {len(names)}!=2")
+        del names[names.index(shooter_name)]
+        victim = self.get_player(names[0])
         
         result = victim.take_shot(coords)
         if result == "hit": return result

@@ -1,6 +1,5 @@
-import random
+
 from cli_terminal import STerminal, CLIDrawer, CLIField, CLITalker
-# from ..modules.game import Game
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -19,16 +18,22 @@ class CLIRenderer:
         self.bots = {} # {playername: BotType}
     
 
-    def update_screen(self):
+    def update_screen(self) -> None:
+        """
+        Uses strings got from cli_terminal methods
+        Collects them into one large string and prints it
+        Completely redraws whole CLI
+        """
         screen = ""
         screen += self.drawer.wipe_screen()
+
         try: names = self.game.get_player_names()
         except: pass
 
-        winner = self.game.whos_winner()
+        winner = self.game.whos_winner() # used to show winscreen and decide whether or not showing enemy ships
         show_ships = winner is not None
 
-        if self.p1_field is not None:
+        if self.p1_field is not None: # tries to add latest state of field if player has it
             if names[0] not in self.bots: show_player_ships = True
             else: show_player_ships = show_ships
             self.p1_field.cells = self.game.get_player_field(names[0], private = show_player_ships)
@@ -39,13 +44,22 @@ class CLIRenderer:
             else: show_player_ships = show_ships
             self.p2_field.cells = self.game.get_player_field(names[1], private = show_player_ships)
             screen += self.p2_field.draw()
-        screen += self.drawer.draw_separator()
-        screen += self.talker.talk()
+
+        screen += self.drawer.draw_separator() # draws board lines and game title
+        screen += self.talker.talk() # prints all line history available
 
         if winner is not None:
             screen += self.talker.show_winner(winner)
         
         self.term.fl(screen)
+    
+
+    # def get_player_field(self, name: str, visible: bool) -> list:
+    #     """
+    #     Returns tuple of field dicts
+    #     """
+    #     return self.game.get_player_field(name, private=visible)
+
 
 
     def set_player(self, name: str, color: str, ai = None):
@@ -170,8 +184,20 @@ class CLIRenderer:
         self.talker.talk(self.term.paint("Game started. Use `sh` to shoot.", "blue"), loud = True)
 
     
-    def shoot(self, shooter, target, tile_name):
+    def shoot(self, shooter: str, coords):
+        """
+        Can take both coord formats: (y,x) and "A1"
+        """
+        if not isinstance(coords, tuple): coords = self.convert_input(coords)
+        result = self.game.shoot(shooter, coords)
+        self.talker.talk(f"{shooter} shot {coords}. Result - {result}")
+        return result
 
-        coords = self.convert_input(tile_name)
-        result = self.game.shoot(shooter, target, coords)
-        self.talker.talk(f"{shooter} shot {tile_name}. Result - {result}")
+
+    def automove(self, name: str) -> str:
+        if name not in self.bots: return
+        names = self.game.get_player_names()
+        del names[names.index(name)]
+        victim = names[0]
+        bots_coords_choose = self.bots[name].shoot(self.game.get_player_field(victim))
+        return self.shoot(name, bots_coords_choose)

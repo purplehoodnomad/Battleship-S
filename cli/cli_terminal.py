@@ -89,7 +89,7 @@ class CLIField:
                     case "free":    symb = "."
                     case "miss":    symb =  self.term.paint("o", "white", side=True)
                     case "object":  symb = self.term.paint("■", self.color)
-                    case "hit":     symb = self.term.paint("X", self.color, side=True)
+                    case "hit":     symb = self.term.paint("X", self.color)
                 output += self.term.move_yx(y_now + y, x_now+3 + x*2) + symb
         return output     
 

@@ -14,7 +14,7 @@ class CLIIO:
     """
     def __init__(self):
         self.term = STerminal()
-        self.r: CLIRenderer = CLIRenderer(self.term)
+        self.r = CLIRenderer(self.term)
         self.talker = self.r.talker
         self.upd = self.r.update_screen
         self.upd()
@@ -26,12 +26,15 @@ class CLIIO:
     
     def run(self): 
         while True:
-            if self.game_active and self.r.bots:
-                for name, bot in self.r.bots.items():
-                    if name == self.r.game.whos_turn():
-                        output = bot.shoot()
-                        self.talker.talk(output)
-                self.upd()
+            for bot_name in self.r.bots.keys():
+                try:
+                    result = "hit"
+                    while result == "hit":
+                        result = self.r.automove(bot_name)
+                except Exception as e:
+                    self.talker.talk(e)
+                    continue
+            self.upd()
                 
 
             try:
@@ -135,38 +138,40 @@ def start(self):
     self.upd()
 
 @CLIIO.command(help_info = "Proceeds to actual playing the game: start")
-def sh(self, shooter, target, coords):
-    self.r.shoot(shooter, target, coords)
+def sh(self, shooter, coords):
+    self.r.shoot(shooter, coords)
     self.upd()
 
 
 
 @CLIIO.command(help_info = "Quick start game: q")
 def q(self):
+    """
+    Autosetup random players adn parameters for debugging
+    """
     self.__init__()
+    # picks random colors from supported
     colors = list(self.term.colors.keys())
     random.shuffle(colors)
-    # два разных цвета
     color1, color2 = colors[:2]
 
-    # создаём игроков
-    name1 = "randomer"
-    name2 = "hunter"
-    self.r.set_player(name1, color1, "randomer")
+    # players setup
+    name1 = "hunter1"
+    name2 = "hunter2"
+    self.r.set_player(name1, color1, "hunter")
     self.r.set_player(name2, color2, "hunter")
 
-    # случайные размеры полей
+    # field creation for both players
     for name in [name1, name2]:
-        width = 16 # random.randint(9, 26)
-        height = 16 # random.randint(9, 26)
-        # пусть всегда прямоугольник
+        width = 9 # random.randint(9, 26)
+        height = 9 # random.randint(9, 26)
         self.r.set_player_field(name, "1", (height, width))
         self.r.game.get_player(name).pending_entities = self.r.game.default_entities.copy()
     
-    self.r.get_players()
     self.r.proceed_to_setup()
     for name in (name1, name2):
         self.r.autoplace(name)
+    
     self.game_active = True
     self.r.start()
     self.upd()

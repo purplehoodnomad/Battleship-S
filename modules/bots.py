@@ -1,6 +1,7 @@
 from __future__ import annotations
 import random
 import logging
+from abc import abstractmethod
 
 # from game import Game
 # from player import Player
@@ -16,54 +17,40 @@ class Bot:
     This allows to think them all the way out without asking renderer to give them copy of all information
     """
     def __init__(self, name, game: Game):
-        self.game = game
-        self.player = self.game.get_player(name)
-        self.player.is_ai = True
-    
-    def get_opponent(self) -> Player:
         """
-        Lets Bot knowing who is his target directly from the game
+        Modificates game player instance to mark it as AI
         """
-        player_list = self.game.get_player_names()
-        if len(player_list) <= 1: raise BotException("Can't get opponent, bot only in game")
-        if len(player_list) >= 3: raise BotException("Playing with more than 2 players is not supported yet")
-        
-        del player_list[player_list.index(self.player.name)]
-        return self.game.get_player(player_list[0])
+        player = game.get_player(name)
+        player.is_ai = True
 
-    def get_free_coords(self) -> list:
+
+    def get_free_coords(self, field: dict) -> list:
         """
         Returns list of (y,x) which are not void and not shot yet
         """
-        t_field = self.get_opponent().get_field()
-
-        shot_available = []
-        for coords, state in t_field.items():
-            if state != "free": continue
-            shot_available.append(coords)
-    
-        if shot_available:
-            return shot_available
-        raise BotException(f"No free cells remain")
+        return [coords for coords, state in field.items() if state == "free"]
     
 
-    def get_neighbours(self, coords: tuple) -> list:
+    def get_neighbours(self, coords: tuple, field: dict) -> list:
         """
         Returns list of closest (y,x) to given coords on opponent's field
         """
-        y, x = coords[0], coords[1]
-        
-        # field method returns all neighbors - even diagonal ones, but it guarantees that those cells exist
-        all_neighbours = self.get_opponent().field.neighbours([coords])
-
+        y, x = coords
         # forms list of 4 potential coordinates next to given coords
         cross_neighbours = [(y + dy, x + dx) for dy, dx in [
                                 (-1,0),
                         (0,-1),          (0,1),
                                  (1,0)]]
-        # picks from all neighbours only those who are in cross
-        return [pos for pos in cross_neighbours if pos in all_neighbours]
+        # picks from cross coordinates which are in actual field
+        return [coord for coord in cross_neighbours if coord in field]
 
+    @abstractmethod
+    def shoot(self, field: dict) -> tuple:
+        """
+        Expects {(y,x): "status"}
+        Returns (y,x) coords where bot wants to shoot
+        """
+        ...
 
 class Randomer(Bot):
     """
@@ -71,21 +58,11 @@ class Randomer(Bot):
     """
     def __init__(self, name, game):
         super().__init__(name, game)
-        logger.info(f"{self.player} is now Randomer Bot")
+        logger.info(f"{name} is now Randomer Bot")
 
-    def shoot(self) -> str:
-        target = self.get_opponent()
-        shot_available = self.get_free_coords()
-
-        if self.player.name == self.game.whos_turn() and self.game.state != self.game.State.OVER:
-            coords = random.choice(shot_available)
-
-            result = self.game.shoot(self.player.name, target.name, coords)
-            output = f"{self.player.name} shot {coords}. Result - {result}"
-
-            if result == "hit" or result == "destroyed": output += "\n" + self.shoot()
-            return output
-        else: return ""
+    def shoot(self, field: dict) -> tuple:
+        shot_available = self.get_free_coords(field)
+        return random.choice(shot_available)
 
 
 class Hunter(Bot):
@@ -96,37 +73,31 @@ class Hunter(Bot):
     """
     def __init__(self, name, game):
         super().__init__(name, game)
-        self.hunt = set()
-        logger.info(f"{self.player} is now Hunter Bot")
+        self.hunt = [] # [(y,x)...]
+        self.last_shot = None # (y,x)
+        logger.info(f"{name} is now Hunter Bot")
         
-    def hunt_validation(self):
+
+    def hunt_validation(self, field: dict) -> list:
         """
         Validates coordinates from hunting set to be shootable 
         """
-        if not self.hunt: return
-
+        if not self.hunt: return self.hunt
+        
+        validated = []
         for coords in list(self.hunt):
-            cell = self.get_opponent().field.get_cell(coords)
-            if cell.is_void or cell.was_shot: self.hunt.remove(coords)
+            if field[coords] == "free":
+                validated.append(coords)
+        self.hunt = validated
+        return self.hunt
 
 
-    def shoot(self) -> str:
-        target = self.get_opponent()
+    def shoot(self, field: dict) -> tuple:
+        if self.last_shot is not None and field[self.last_shot] == "hit":
+            self.hunt.extend([coords for coords in self.get_neighbours(self.last_shot, field) if coords not in self.hunt])
 
-        if not self.hunt: shot_available = self.get_free_coords()
-        else: shot_available = list(self.hunt)
-
-        if self.player.name == self.game.whos_turn() and self.game.state != self.game.State.OVER:
-            coords = random.choice(shot_available)
-
-            result = self.game.shoot(self.player.name, target.name, coords)
-            output = f"{self.player.name} shot {coords}. Result - {result}"
-            
-            self.hunt_validation() # deletes missed cell from hunt set
-            if result == "hit" or result == "destroyed":
-                for neighbour in self.get_neighbours(coords):
-                    self.hunt.add(neighbour)
-                self.hunt_validation() # validates all of the neighbours after addition
-                output += "\n" + self.shoot()
-            return output
-        else: return ""
+        shot_available = self.hunt_validation(field)
+        if not shot_available:
+            shot_available = self.get_free_coords(field)
+        self.last_shot = random.choice(shot_available)
+        return self.last_shot

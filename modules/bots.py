@@ -1,7 +1,7 @@
 from __future__ import annotations
 import random
 import logging
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 # from game import Game
 # from player import Player
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class BotException(Exception): pass
-class Bot:
+class Bot(ABC):
     """
     Bots communicate with all of the modules directly
     This allows to think them all the way out without asking renderer to give them copy of all information
@@ -50,7 +50,7 @@ class Bot:
         Expects {(y,x): "status"}
         Returns (y,x) coords where bot wants to shoot
         """
-        ...
+        pass
 
 class Randomer(Bot):
     """
@@ -62,7 +62,9 @@ class Randomer(Bot):
 
     def shoot(self, field: dict) -> tuple:
         shot_available = self.get_free_coords(field)
-        return random.choice(shot_available)
+        shot = random.choice(shot_available)
+        logger.debug(f"RandomerBot chose to shoot {shot} from {len(shot_available)} free cells")
+        return shot
 
 
 class Hunter(Bot):
@@ -95,9 +97,12 @@ class Hunter(Bot):
     def shoot(self, field: dict) -> tuple:
         if self.last_shot is not None and field[self.last_shot] == "hit":
             self.hunt.extend([coords for coords in self.get_neighbours(self.last_shot, field) if coords not in self.hunt])
+            logger.debug(f"HunterBot is in hunt mode. Hunting for {self.hunt}")
 
         shot_available = self.hunt_validation(field)
         if not shot_available:
             shot_available = self.get_free_coords(field)
+            logger.debug(f"HunterBot is in random mode")
         self.last_shot = random.choice(shot_available)
+        logger.debug(f"HunterBot chose to shoot {self.last_shot} from {len(shot_available)} free cells")
         return self.last_shot

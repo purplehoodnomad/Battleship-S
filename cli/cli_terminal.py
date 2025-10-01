@@ -1,5 +1,6 @@
 from blessed import Terminal
 from functools import partial
+from modules.enums_and_events import CellStatus
 
 
 class STerminal:
@@ -85,11 +86,11 @@ class CLIField:
             for x in range(self.width):
                 symb = ""
                 match self.cells[(y, x)]:
-                    case "void":    symb = " "
-                    case "free":    symb = "."
-                    case "miss":    symb =  self.term.paint("o", "white", side=True)
-                    case "object":  symb = self.term.paint("■", self.color)
-                    case "hit":     symb = self.term.paint("X", self.color)
+                    case CellStatus.VOID:    symb = " "
+                    case CellStatus.FREE:    symb = "."
+                    case CellStatus.MISS:    symb =  self.term.paint("o", "white", side=True)
+                    case CellStatus.ENTITY:  symb = self.term.paint("■", self.color)
+                    case CellStatus.HIT:     symb = self.term.paint("X", self.color)
                 output += self.term.move_yx(y_now + y, x_now+3 + x*2) + symb
         return output     
 

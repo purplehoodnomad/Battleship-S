@@ -1,6 +1,7 @@
 import logging
 from modules.field import Field
 from modules.entities import Entity, Ship
+from modules.enums_and_events import CellStatus
 
 
 logger = logging.getLogger(__name__)
@@ -110,18 +111,18 @@ class Player:
             cell = self.field.get_cell(coords)
             
             match (cell.is_void, cell.occupied_by, cell.was_shot):
-                case (True, _, _):          symb = "void"
+                case (True, _, _):          symb = CellStatus.VOID
                 case (_, occupied_by, True):
-                    if occupied_by is None: symb = "miss"
-                    else:                   symb = "hit"
+                    if occupied_by is None: symb = CellStatus.MISS
+                    else:                   symb = CellStatus.HIT
                 case (_, occupied_by, False):
-                    if private and occupied_by is not None: symb = "object"
-                    else:                   symb = "free"
+                    if private and occupied_by is not None: CellStatus.ENTITY
+                    else:                   symb = CellStatus.FREE
             public_field[coords] = symb
         return public_field
 
 
-    def take_shot(self, coords: tuple) -> str:
+    def take_shot(self, coords: tuple) -> CellStatus:
         return self.field.take_shot(coords)
 
 

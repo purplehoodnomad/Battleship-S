@@ -2,10 +2,7 @@ from __future__ import annotations
 import random
 import logging
 from abc import ABC, abstractmethod
-
-# from game import Game
-# from player import Player
-# from field import Field, Cell
+from modules.enums_and_events import CellStatus
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +25,7 @@ class Bot(ABC):
         """
         Returns list of (y,x) which are not void and not shot yet
         """
-        return [coords for coords, state in field.items() if state == "free"]
+        return [coords for coords, state in field.items() if state == CellStatus.FREE]
     
 
     def get_neighbours(self, coords: tuple, field: dict) -> list:
@@ -88,14 +85,14 @@ class Hunter(Bot):
         
         validated = []
         for coords in list(self.hunt):
-            if field[coords] == "free":
+            if field[coords] == CellStatus.FREE:
                 validated.append(coords)
         self.hunt = validated
         return self.hunt
 
 
     def shoot(self, field: dict) -> tuple:
-        if self.last_shot is not None and field[self.last_shot] == "hit":
+        if self.last_shot is not None and field[self.last_shot] == CellStatus.HIT:
             self.hunt.extend([coords for coords in self.get_neighbours(self.last_shot, field) if coords not in self.hunt])
             logger.debug(f"HunterBot is in hunt mode. Hunting for {self.hunt}")
 

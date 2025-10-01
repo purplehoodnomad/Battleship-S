@@ -1,5 +1,6 @@
 from __future__ import annotations
 import logging
+from modules.enums_and_events import CellStatus
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,8 @@ class Field:
 
     # checks if cell with given (y, x) is part of field
     def cell_exists(self, coords: tuple) -> bool:
-        return bool(coords) and coords in self._cells
+        if coords is None: return False
+        return coords in self._cells
     
 
     def generate_field(self, shape: str, params: list) -> None:
@@ -51,8 +53,7 @@ class Field:
                 raise FieldException(f"{self}: no {shape} shape supported")
 
     def generate_rectangle(self, height: int, width: int) -> None:
-        allowed_sizes = list(range(1, 27)) # corresponds A-Z
-        if width not in allowed_sizes or height not in allowed_sizes: raise FieldException(f"{self}: Dimensions must be between 1 and 26")
+        if width < 7 and width > 26: raise FieldException(f"{self}: Dimensions must be between 7 and 26")
         
         self.dimensions = {"height": height, "width": width}
         for y in range(height):
@@ -129,8 +130,7 @@ class Field:
             return neighbours
     
     
-    # ЕЩЕ НЕ ОПРОБОВАНО
-    def take_shot(self, coords) -> str:
+    def take_shot(self, coords) -> CellStatus:
         """
         Returns result of attempt: miss, hit or destroyed
         If ship is destroyed - makes all nearby cells was_shot = True
@@ -142,7 +142,7 @@ class Field:
         if cell.occupied_by is None:
             cell.was_shot = True
             logger.info(f"{self}: {cell} was shot")
-            return "miss"
+            return CellStatus.MISS
         
         cell.was_shot = True
         occupator = cell.occupied_by
@@ -151,10 +151,9 @@ class Field:
             # filling all nearby as was_shot
             for close_coords in self.neighbours(occupator.cells_occupied):
                 self.get_cell(close_coords).was_shot = True
-                logger.info(f"{self}: {close_coords} marked as shot")
-            return "destroyed"
-        logger.info(f"{self}: {cell} was shot")
-        return "hit"
+                logger.info(f"{self}: {close_coords} marked as shot next to destroyed entity")
+            return CellStatus.DESTROYED
+        return CellStatus.HIT
         
 
     def __iter__(self):
@@ -190,8 +189,8 @@ class Cell:
         return f"cell({self.y},{self.x},{state})"
     
     def __repr__(self):
-        return f"Cell({self.y},{self.x}) is_void={self.is_void}, was_shot={self.was_shot})"
+        return f"Cell({self.y},{self.x}) is_void={self.is_void}, was_shot={self.was_shot}"
 
     def free(self):
         self.occupied_by = None
-        logger.debug(f"{self} state updated.")
+        logger.debug(f"{self} state updated")

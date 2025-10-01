@@ -1,12 +1,7 @@
 import random
-from cli_terminal import STerminal, CLITalker, CLIDrawer, CLIField
-from cli_renderer import CLIRenderer
-# from ..modules.game import Game
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from cli.cli_terminal import STerminal, CLITalker, CLIDrawer, CLIField
+from cli.cli_renderer import CLIRenderer
 from modules.game import Game
-
 
 class CLIIO:
     """
@@ -26,15 +21,16 @@ class CLIIO:
     
     def run(self): 
         while True:
-            for bot_name in self.r.bots.keys():
-                try:
-                    result = "hit"
-                    while result == "hit":
-                        result = self.r.automove(bot_name)
-                except Exception as e:
-                    self.talker.talk(e)
-                    continue
-            self.upd()
+            if self.game_active:
+                for bot_name in self.r.bots.keys():
+                    try:
+                        result = "hit"
+                        while result == "hit":
+                            result = self.r.automove(bot_name)
+                    except Exception as e:
+                        self.talker.talk(e)
+                        continue
+                self.upd()
                 
 
             try:
@@ -176,14 +172,9 @@ def q(self):
     self.r.start()
     self.upd()
 
-if __name__ == "__main__":
-    import logging
-    with open("log.log", "w") as file: file.write("")
-    logging.basicConfig(
-    filename = "log.log",
-    level = logging.INFO,
-    format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    filemode = "a",
-    )
+def main():
     io = CLIIO()
     io.run()
+
+if __name__ == "__main__":
+    main()

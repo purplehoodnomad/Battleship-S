@@ -1,8 +1,4 @@
-
-from cli_terminal import STerminal, CLIDrawer, CLIField, CLITalker
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from cli.cli_terminal import STerminal, CLIDrawer, CLIField, CLITalker
 from modules.game import Game
 from modules.bots import Randomer, Hunter
 
@@ -92,13 +88,13 @@ class CLIRenderer:
         except: self.talker.talk(f"No players. Use 'add playername' first")
 
     def delete_player(self, name):
-        meta = self.game.get_player_meta(name)
-        self.game.del_player(name)
-        self.talker.talk(meta)
-        if not meta['order']:
+        meta = self.game.del_player(name)
+        
+        if meta['order'] == 1:
             self.p1_field = self.p2_field
-            self.p1_field.x0 = 0
+            if self.p1_field is not None: self.p1_field.x0 = 0
         self.p2_field = None
+        
         try: del self.bots[name]
         except KeyError: pass
         self.talker.talk(f"Player <{self.term.paint(meta['name'], meta['color'])}> deleted")

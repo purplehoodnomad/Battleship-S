@@ -4,6 +4,7 @@ from enum import Enum
 import uuid
 from modules.player import Player
 from modules.entities import Entity
+from modules.enums_and_events import *
 
 
 logger = logging.getLogger()
@@ -15,20 +16,13 @@ class Game:
     Manages players and their abilities. Interface for renderer structures - CLI or endpoints
     """
     default_entities = {
-        Entity.Type.CORVETTE: 4,
-        Entity.Type.FRIGATE: 3,
-        Entity.Type.DESTROYER: 2,
-        Entity.Type.CRUISER: 1,
-        # Entity.Type.BATTLESHIP: 0,
-        # Entity.Type.RELAY: 0,
-        # Entity.Type.PLANET: 0
+        EntityType.CORVETTE: 4,
+        EntityType.FRIGATE: 3,
+        EntityType.DESTROYER: 2,
+        EntityType.CRUISER: 1
     }
-    
-    class State(Enum):
-        LOBBY = 1
-        SETUP = 2
-        ACTIVE = 3
-        OVER = 4
+    State = GameState
+
 
     def __init__(self):
         self.id = "game_" + str(uuid.uuid4())[:6]
@@ -36,8 +30,39 @@ class Game:
         self.order = [] # order of turns ("name")
         self.turn = 0
         self.state = self.State.LOBBY
-        self.winner = None
+        self.winner: str = None
+        self.events = []
 
+    
+    def add_event(self, event_type: EventType, **kwargs):
+        """
+        Forms all event types and adds them to self.event history
+        """
+        match event_type:
+            case EventType.LOBBY:
+                try: names = self.get_player_names()
+                except GameException: names = []
+                e = LobbyEvent(
+                    game_state=self.state,
+                    event_type=event_type,
+                    player_1=names[0] if names else None,
+                    player_2=names[1] if len(names) > 1 else None,
+                    winner=self.winner,
+                    lobby_event=kwargs["lobby_event_type"],
+                    payload=kwargs["payload"],
+                )
+            case EventType.SHOT:
+                e = ShotEvent(
+                    game_state=self.state,
+                    event_type=event_type,
+                    turn=self.turn,
+                    shooter=kwargs["shooter"],
+                    target=kwargs["target"],
+                    coords=kwargs["coords"],
+                    shot_result=kwargs["shot_result"],
+                )
+        self.events.append(e)
+        return e
 
     def whos_turn(self) -> str:
         """
@@ -63,17 +88,28 @@ class Game:
 
         logger.info(f"{self}: Player: {player} was set.")
         logger.info(f"{self}: player order: {self.order}.")
+
+        payload = {
+            "added_player": name,
+            "added_player_turn": self.order.index(player.name)
+        }
+        self.add_event(EventType.LOBBY, lobby_event_type=LobbyEventType.PLAYER_ADDED, payload=payload)
         return self.get_player_meta(player.name)
     
 
     def del_player(self, name: str) -> None:
-        self.get_player(name)
         self.check_state(self.State.LOBBY)
+        meta = self.get_player_meta(name)
 
         del self.order[self.order.index(name)]
         del self._players[name]
-        logger.info(f"Player {name} was deleted")
-        logger.info(f"{self}: player order: {self.order}.")
+
+        payload = {
+            "deleted_player": name
+        }
+        self.add_event(EventType.LOBBY, lobby_event_type=LobbyEventType.PLAYER_DELETED, payload=payload)
+        
+        return meta
     
 
     def get_player(self, name: str) -> Player:
@@ -101,7 +137,7 @@ class Game:
             "color": player.color,
             "order": self.order.index(player.name),
             "is_ai": player.is_ai,
-            "pending": {} # dict if pending entities
+            "pending": {} # dict of pending entities
         }
         for etype, amount in player.pending_entities.items():
             meta["pending"][str(etype).replace("Type.", "").capitalize()] = amount
@@ -146,17 +182,27 @@ class Game:
         names = self.get_player_names()
         if len(names) != 2: raise GameException(f"Can't get opponent of {shooter_name}, player count {len(names)}!=2")
         del names[names.index(shooter_name)]
-        victim = self.get_player(names[0])
+        target_name = names[0]
+        target = self.get_player(target_name)
         
-        result = victim.take_shot(coords)
-        if result == "hit": return result
-        elif result == "destroyed":
-            if all(Entity.Status.DESTROYED == entity.status for entity in victim.entities.values()):
+        result = target.take_shot(coords)
+        if result == CellStatus.HIT: return result
+        elif result == CellStatus.DESTROYED:
+            if all(Entity.Status.DESTROYED == entity.status for entity in target.entities.values()):
                 self.state = self.State.OVER
                 self.winner = shooter.name
         self.turn += 1
-        return result
+
         
+        e = self.add_event(
+            EventType.SHOT,
+            shooter=shooter_name,
+            target=target_name,
+            coords=coords,
+            shot_result=result
+        )
+        logger.warning(e)
+        return result
         
 
     def change_player_field(self, name: str, shape: str, params: list) -> None:
@@ -236,7 +282,7 @@ class Game:
             player.normalize_eids()
 
 
-    def whos_winner(self):
+    def whos_winner(self) -> str:
         try:
             self.check_state(self.State.OVER)
             return self.winner

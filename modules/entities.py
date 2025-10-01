@@ -21,7 +21,7 @@ class Entity:
         CRUISER = 4
         # BATTLESHIP = 5
         # RELAY = 11
-        # PLANET = 21
+        PLANET = 6
 
     _counter = 0 # used to implement entity ids
     def __init__(self):
@@ -108,8 +108,72 @@ class Ship(Entity):
         return f"eid={self.eid} {self.type} {self.status}, a={self.anchor} r={self.rotation}"
 
 
-class Space_Object(Entity):
-    pass
+class Planet(Entity):
+    def __init__(self):
+        super().__init__()
+        self.orbit_center = ()
+        self.orbit_cells = []
+        self._position = 0
+        self.type = Entity.Type.PLANET
+    
+    @property
+    def position(self):
+        return self._position
+
+    @position.setter
+    def position(self, value: int):
+        length = len(self.orbit_cells)
+        self._position = (value + length) % length
+
+    def set_orbit(self, center: tuple, radius: int) -> None:
+        y0, x0 = center
+        if radius == 0:
+            self.orbit_center = center
+            self.orbit_cells = [center]
+            return
+
+        orbit = set()
+        x = 0
+        y = radius
+        d = 1 - radius
+
+        while x <= y:
+            points_of_symmetry = [
+                (y0 + y, x0 + x), (y0 - y, x0 + x),
+                (y0 + y, x0 - x), (y0 - y, x0 - x),
+                (y0 + x, x0 + y), (y0 - x, x0 + y),
+                (y0 + x, x0 - y), (y0 - x, x0 - y),
+            ]
+            for p in points_of_symmetry:
+                orbit.add(p)    
+            if d < 0:
+                d += 2 * x + 3
+            else:
+                d += 2 * (x - y) + 5
+                y -= 1
+            x += 1
+        self.orbit_center = center
+        self.orbit_cells = list(orbit)
+        self.orbit_cells = self.sort_orbit()
+    
+    
+    def sort_orbit(self):
+        """
+        Sorts orbit points by angle
+        Makes it possible to move planet by iterating coords list
+        """
+        from math import atan2, pi
+        points_with_angles = []
+        y0, x0 = self.orbit_center
+
+        for point in self.orbit_cells:
+            y, x = point
+            angle = atan2(y - y0, x - x0)
+            if angle < 0: angle += 2 * pi # normilizes to start from 0 to 2pi
+            points_with_angles.append((angle, point))
+
+        points_with_angles.sort(key=lambda point: point[0])
+        return [point for angle, point in points_with_angles]
 
 class Construction(Entity):
     pass

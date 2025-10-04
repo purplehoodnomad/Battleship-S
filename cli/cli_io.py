@@ -142,6 +142,38 @@ def sh(self, shooter, coords):
 
 @CLIIO.command(help_info = "Quick start game: q")
 def q(self):
+    # """
+    # Autosetup random players adn parameters for debugging
+    # """
+    # self.__init__()
+    # # picks random colors from supported
+    # colors = list(self.term.colors.keys())
+    # random.shuffle(colors)
+    # color1, color2 = colors[:2]
+
+    # # players setup
+    # name1 = "hunter1"
+    # name2 = "hunter2"
+    # self.r.set_player(name1, color1, "hunter")
+    # self.r.set_player(name2, color2, "hunter")
+
+    # # field creation for both players
+    # for name in [name1, name2]:
+    #     width = 11 # random.randint(9, 26)
+    #     height = 11 # random.randint(9, 26)
+    #     self.r.set_player_field(name, "3", height)
+    #     self.r.game.get_player(name).pending_entities = self.r.game.default_entities.copy()
+    
+    # self.r.proceed_to_setup()
+    # for name in (name1, name2):
+    #     self.r.autoplace(name)
+    
+    # self.game_active = True
+    # self.r.start()
+    # self.upd()
+
+
+
     """
     Autosetup random players adn parameters for debugging
     """
@@ -152,25 +184,15 @@ def q(self):
     color1, color2 = colors[:2]
 
     # players setup
-    name1 = "hunter1"
-    name2 = "hunter2"
-    self.r.set_player(name1, color1, "hunter")
-    self.r.set_player(name2, color2, "hunter")
+    name1 = "sex"
+    name2 = "loner"
+    self.r.set_player(name1, color1)
+    self.r.set_player(name2, color2)
 
-    # field creation for both players
-    for name in [name1, name2]:
-        width = 9 # random.randint(9, 26)
-        height = 9 # random.randint(9, 26)
-        self.r.set_player_field(name, "1", (height, width))
-        self.r.game.get_player(name).pending_entities = self.r.game.default_entities.copy()
-    
-    self.r.proceed_to_setup()
-    for name in (name1, name2):
-        self.r.autoplace(name)
-    
-    self.game_active = True
-    self.r.start()
+    self.r.set_player_field(name1, "2", ["12", "0"])
+    self.r.set_player_field(name2, "6", ["11", "0"])
     self.upd()
+
 
 def main():
     io = CLIIO()

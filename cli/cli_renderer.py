@@ -48,15 +48,7 @@ class CLIRenderer:
             screen += self.talker.show_winner(winner)
         
         self.term.fl(screen)
-    
-
-    # def get_player_field(self, name: str, visible: bool) -> list:
-    #     """
-    #     Returns tuple of field dicts
-    #     """
-    #     return self.game.get_player_field(name, private=visible)
-
-
+        
 
     def set_player(self, name: str, color: str, ai = None):
         """
@@ -110,16 +102,21 @@ class CLIRenderer:
         self.talker.talk(f"{self.term.paint(name, color)} color changed")
 
 
-    def set_player_field(self, name: str, shape: str, params: tuple, ):
+    def set_player_field(self, name: str, shape: str, params):
         meta = self.game.get_player_meta(name)
 
         match shape:
             case "1": shape = "rectangle"
             case "2": shape = "circle"
             case "3": shape = "triangle"
+            case "4": shape = "rhombus"
+            case "5": shape = "pentagon"
+            case "6": shape = "hexagon"
+            case "7": shape = "heptagon"
             case _: shape = "<WRONG SHAPE ID>"
-        if params is None: params = [0, 0]
-        self.game.change_player_field(name, shape, list(params))
+        if params is None:
+            params = [10, 10]
+        self.game.change_player_field(name, shape, params)
 
         order = int(meta["order"])
         field = CLIField(self.term, int(meta["order"]), meta["name"], meta["color"])

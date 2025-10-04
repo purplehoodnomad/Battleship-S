@@ -29,8 +29,11 @@ class Field:
         self.dimensions = {"height": -1, "width": -1}
         logger.info(f"{self} wiped")
 
-    # checks if cell with given (y, x) is part of field
+
     def cell_exists(self, coords: tuple) -> bool:
+        """
+        Checks if cell with given (y, x) is part of field
+        """
         if coords is None: return False
         return coords in self._cells
     
@@ -43,23 +46,238 @@ class Field:
         """
         self.wipe_field()
         
-        if shape is None: (f"{self}: None can't be shape")
+        if shape is None: raise FieldException(f"{self}: None can't be shape")
         match shape:
             case "rectangle":
-                if len(params) < 2: raise FieldException(f"{self}: No proper rectangle dimensions given.")
+                if len(params) < 2: raise FieldException(f"{self}: No proper rectangle dimensions given")
                 height, width = int(params[0]), int(params[1])
-                return self.generate_rectangle(height, width)
+                self.generate_rectangle(height, width)
+            
+            case "circle":
+                if len(params) < 1: raise FieldException(f"{self}: No proper circle radius given")
+                radius = int(params[0])
+                self.generate_circle(radius)
+            
+            case "triangle":
+                if len(params) < 1: raise FieldException(f"{self}: No proper triangle size given")
+                radius = int(params[0])
+                try:
+                    angle = float(params[1])
+                except IndexError:
+                    angle = 0
+                self.generate_ngon(3, radius, angle)
+            
+            case "rhombus":
+                if len(params) < 1: raise FieldException(f"{self}: No proper rhombus size given")
+                radius = int(params[0])
+                try:
+                    angle = float(params[1])
+                except IndexError:
+                    angle = 0
+                self.generate_ngon(4, radius, angle)
+            
+            case "pentagon":
+                if len(params) < 1: raise FieldException(f"{self}: No proper pentagon size given")
+                radius = int(params[0])
+                try:
+                    angle = float(params[1])
+                except IndexError:
+                    angle = 0
+                self.generate_ngon(5, radius, angle)
+            
+            case "hexagon":
+                if len(params) < 1: raise FieldException(f"{self}: No proper hexagon size given")
+                radius = int(params[0])
+                try:
+                    angle = float(params[1])
+                except IndexError:
+                    angle = 0
+                self.generate_ngon(6, radius, angle)        
+
+            case "heptagon":
+                if len(params) < 1: raise FieldException(f"{self}: No proper heptagon size given")
+                radius = int(params[0])
+                try:
+                    angle = float(params[1])
+                except IndexError:
+                    angle = 0
+                self.generate_ngon(7, radius, angle)
+
             case _:
                 raise FieldException(f"{self}: no {shape} shape supported")
 
-    def generate_rectangle(self, height: int, width: int) -> None:
-        if width < 7 and width > 26: raise FieldException(f"{self}: Dimensions must be between 7 and 26")
+
+    def vodify_corners(self, coords: list) -> None:
+        """
+        Expects list of edge coords
+        Makes void all cells which must be vodified to form a field shape
+        """
+        voided = set()
         
+        for y in range(self.dimensions["height"]):
+            for x in range(self.dimensions["width"]):
+                if (y, x) not in coords:
+                    voided.add((y, x))
+                else: break
+            for x in range(self.dimensions["width"]-1, -1, -1):
+                if (y, x) not in coords:
+                    voided.add((y, x))
+                else: break
+        
+        for yx in voided:
+            self.get_cell(yx).is_void = True
+
+
+    def generate_rectangle(self, height: int, width: int) -> None:
+        """
+        Generates rectangle field with given height and width.
+        H&W < 7 are non-playable and not supported.
+        """
+        if width < 7 or height < 7: raise FieldException(f"{self}: Dimensions must be >7")
+
         self.dimensions = {"height": height, "width": width}
         for y in range(height):
             for x in range(width):
                 self._cells[(y, x)] = Cell(y, x)
         logger.info(f"{self} generated")
+
+
+    def generate_circle(self, radius: int) -> None:
+        """
+        Generates round field with given height and width.
+        Radius <5 are non-playable and not supported.
+        """
+        if radius < 5: raise FieldException(f"{self}: Circle field radius must be >4")
+        size = 2*radius + 1
+
+        self.dimensions ={"height": size, "width": size}
+        for y in range(size):
+            for x in range(size):
+                self._cells[(y, x)] = Cell(y, x)
+        
+        circle_coords = self.circle_coords(radius, (radius, radius))
+        self.vodify_corners(circle_coords)
+
+
+    def circle_coords(self, radius: int, center = (0, 0),) -> list:
+        """
+        Uses Bresenghem algorithm to draw circle border with given radius and center.
+        Returns list of (y, x) of drawn edges
+        """
+        y0, x0 = center
+        if radius == 0:
+            return [center]
+
+        circle = set()
+        x = 0
+        y = radius
+        d = 1 - radius
+
+        while x <= y:
+            points_of_symmetry = [
+                (y0 + y, x0 + x), (y0 - y, x0 + x),
+                (y0 + y, x0 - x), (y0 - y, x0 - x),
+                (y0 + x, x0 + y), (y0 - x, x0 + y),
+                (y0 + x, x0 - y), (y0 - x, x0 - y),
+            ]
+            for p in points_of_symmetry:
+                circle.add(p)    
+            if d < 0:
+                d += 2 * x + 3
+            else:
+                d += 2 * (x - y) + 5
+                y -= 1
+            x += 1
+        return circle
+
+    def sort_circle_coords(self, center: tuple, coords) -> list:
+        """
+        Sorts circle coords by angle.
+        Suggests that circle has to gaps.
+        Makes it possible to move planet by iterating coords list.
+        """
+        from math import atan2, pi
+        points_with_angles = []
+        y0, x0 = center
+
+        for point in coords:
+            y, x = point
+            angle = atan2(y - y0, x - x0)
+            if angle < 0: angle += 2 * pi # normilizes to start from 0 to 2pi
+            points_with_angles.append((angle, point))
+
+        points_with_angles.sort(key=lambda point: point[0])
+        return [point for angle, point in points_with_angles]  
+
+
+    def generate_ngon(self, n: int, radius: int, angle = 0.0) -> None:
+        """
+        Generates polygon field with n vertices and given radius/angle.
+        """
+        if n < 3: raise FieldException(f"{self}: Polygon must have at least 3 points")
+        ngon_coords = self.ngon_coords(n=n, radius=radius, angle=angle)
+        y_min = min(y for y, _ in ngon_coords)
+        y_max = max(y for y, _ in ngon_coords) - y_min + 1
+        x_min = min(x for _, x in ngon_coords)
+        x_max = max(x for _, x in ngon_coords) - x_min + 1
+
+        normalized_coords = []
+        for y, x in ngon_coords:
+            normalized_coords.append((y-y_min, x-x_min))
+        
+        self.dimensions ={"height": y_max, "width": x_max}
+        for y in range(y_max):
+            for x in range(x_max):
+                self._cells[(y, x)] = Cell(y, x)
+        self.vodify_corners(normalized_coords)
+    
+    def ngon_coords(self, /, n: int, radius: int, center = (0, 0), angle = 0) -> list:
+        """
+        Uses Bresenghem algorithm to draw polygon border with given radius, center and angle
+        Returns list of (y, x) of drawn edges
+        """
+        from math import sin, cos, pi, ceil
+        angle = angle/180 * pi
+        y0, x0 = center
+        if radius == 0:
+            return [center]
+        
+        points = []
+        if n == 3:
+            for i in range(n):
+                y = int(ceil(y0 + radius*sin(2*pi*i/n + angle)))
+                x = int(ceil(x0 + radius*cos(2*pi*i/n + angle)))
+                points.append((y, x))
+        else:
+            for i in range(n):
+                y = int(round(y0 + radius*sin(2*pi*i/n + angle)))
+                x = int(round(x0 + radius*cos(2*pi*i/n + angle)))
+                points.append((y, x))       
+        
+        coords = set()
+        for i in range(-1, len(points)-1):
+            y1, x1 = points[i]
+            y2, x2 = points[i+1]
+
+            dx = abs(x2 - x1)
+            dy = abs(y2 - y1)
+            sx = 1 if x1 < x2 else -1
+            sy = 1 if y1 < y2 else -1
+            err = dx - dy
+
+            while True:
+                coords.add((y1, x1))
+                if x1 == x2 and y1 == y2:
+                    break
+                e2 = 2 * err
+                if e2 > -dy:
+                    err -= dy
+                    x1 += sx
+                if e2 < dx:
+                    err += dx
+                    y1 += sy
+
+        return list(coords)      
 
 
     def get_cell(self, coords: tuple) -> Cell:

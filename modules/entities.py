@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 from enum import Enum
+from modules.enums_and_events import EntityType, EntityStatus, circle_coords, sort_circle_coords, ngon_coords
 
 
 logger = logging.getLogger(__name__)
@@ -8,20 +9,8 @@ logger = logging.getLogger(__name__)
 
 class EntityException(Exception): pass
 class Entity:
-    class Status(Enum):
-        NOTPLACED = 0
-        FULLHEALTH = 1
-        DAMAGED = 2
-        DESTROYED = 3
-    class Type(Enum):
-        UNIDENTIFIED = 0
-        CORVETTE = 1
-        FRIGATE = 2
-        DESTROYER = 3
-        CRUISER = 4
-        # BATTLESHIP = 5
-        # RELAY = 11
-        PLANET = 6
+    Status = EntityStatus
+    Type = EntityType
 
     _counter = 0 # used to implement entity ids
     def __init__(self):
@@ -41,7 +30,7 @@ class Entity:
         Entity._counter += 1
 
 
-    def update_state(self, *, anchor_coords: tuple, occupied_cells: list, rotation: int, status: int) -> None:
+    def update_state(self, *, anchor_coords = None, occupied_cells = None, rotation = None, status = None) -> None:
         """
         Syncronizes self state with data given by Field
         Updates only given parameters
@@ -78,6 +67,10 @@ class Entity:
         ]
         return (dydx[rotation], rotation)
 
+    def __str__(self):
+        type_name = str(self.type).replace('Type.', '').capitalize()
+        return f"{type_name}-{self.eid}"
+
 
 
 class Ship(Entity):
@@ -100,80 +93,72 @@ class Ship(Entity):
         # dcit was chosen with goal not to struggle with which index is what
         return {"coords": [((y0 + i*dydx[0]), (x0 + i*dydx[1])) for i in range(self.size)], "rotation": rotation}
 
-    def __str__(self):
-        type_name = str(self.type).replace('Type.', '').capitalize()
-        return f"{type_name}-{self.eid}"
 
     def __repr__(self):
         return f"eid={self.eid} {self.type} {self.status}, a={self.anchor} r={self.rotation}"
 
 
 class Planet(Entity):
-    def __init__(self):
+    def __init__(self, radius: int, center: tuple):
         super().__init__()
+        self.orbit_radius = radius
         self.orbit_center = ()
         self.orbit_cells = []
-        self._position = 0
+        from random import choice
+        self.rotation = choice([1, -1]) # 1=clockwise; -1=counterclockwise
+        self.anchor = ()
+        self.cells_occupied = [] # basically orbit cell list which are part of field
         self.type = Entity.Type.PLANET
+
+        self.set_orbit(radius, center)
     
     @property
-    def position(self):
+    def position(self) -> int:
         return self._position
 
+    # @position.setter
+    # def position(self, value: int):
+    #     value *= self.rotation
+    #     length = len(self.orbit_cells)
+    #     if not length: return
+    #     self._position = (value + length) % length
+    #     self.anchor = self.orbit_cells[self._position]
     @position.setter
     def position(self, value: int):
         length = len(self.orbit_cells)
-        self._position = (value + length) % length
+        if length == 0:
+            return
 
-    def set_orbit(self, center: tuple, radius: int) -> None:
-        y0, x0 = center
+        value = int(value)
+
+        # первичная установка: если _position ещё не задана — принимаем value как абсолютный индекс
+        if not hasattr(self, "_position") or self._position is None:
+            self._position = value % length
+            self.anchor = self.orbit_cells[self._position]
+            return
+
+        # иначе value — это новый абсолютный индекс, вычисляем дельту и применяем направление
+        old = self._position
+        delta = value - old
+        self._position = (old + delta * self.rotation) % length
+        self.anchor = self.orbit_cells[self._position]
+
+
+    def set_orbit(self, radius: int, center: tuple) -> None:
         if radius == 0:
             self.orbit_center = center
             self.orbit_cells = [center]
             return
-
-        orbit = set()
-        x = 0
-        y = radius
-        d = 1 - radius
-
-        while x <= y:
-            points_of_symmetry = [
-                (y0 + y, x0 + x), (y0 - y, x0 + x),
-                (y0 + y, x0 - x), (y0 - y, x0 - x),
-                (y0 + x, x0 + y), (y0 - x, x0 + y),
-                (y0 + x, x0 - y), (y0 - x, x0 - y),
-            ]
-            for p in points_of_symmetry:
-                orbit.add(p)    
-            if d < 0:
-                d += 2 * x + 3
-            else:
-                d += 2 * (x - y) + 5
-                y -= 1
-            x += 1
+        orbit = circle_coords(radius, center)
+        orbit = sort_circle_coords(center, orbit)
         self.orbit_center = center
-        self.orbit_cells = list(orbit)
-        self.orbit_cells = self.sort_orbit()
-    
-    
-    def sort_orbit(self):
-        """
-        Sorts orbit points by angle
-        Makes it possible to move planet by iterating coords list
-        """
-        from math import atan2, pi
-        points_with_angles = []
-        y0, x0 = self.orbit_center
+        self.orbit_cells = orbit
+        from random import randint
+        self.position = randint(0, len(orbit) - 1)
 
-        for point in self.orbit_cells:
-            y, x = point
-            angle = atan2(y - y0, x - x0)
-            if angle < 0: angle += 2 * pi # normilizes to start from 0 to 2pi
-            points_with_angles.append((angle, point))
 
-        points_with_angles.sort(key=lambda point: point[0])
-        return [point for angle, point in points_with_angles]
+    def __repr__(self):
+        return f"eid={self.eid} {self.type}, c={self.orbit_center} r={self.orbit_radius}"
 
 class Construction(Entity):
     pass

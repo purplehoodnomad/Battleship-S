@@ -1,7 +1,7 @@
 import logging
 from modules.field import Field
-from modules.entities import Entity, Ship
-from modules.enums_and_events import CellStatus
+from modules.entities import Entity, Ship, Planet
+from modules.enums_and_events import CellStatus, EntityType
 
 
 logger = logging.getLogger(__name__)
@@ -41,35 +41,43 @@ class Player:
             logger.info(f"{self} tried to be {color}. Changed it to {self.color} instead")
 
 
-    def place_entity(self, type_value: int, coords: tuple, rot: int) -> None:
+    def place_entity(self, type_value: int, params: list) -> None:
         """
         It creates entity instance - that's necessary for attempt to place entity where player has chosen
         If attempt is not valid - this instace is left to garbage collector and not placed to player.entities dict
-        Note that entity id numeration starts to be messed up at that point which is not big deal
+        Ships: params = [coords: tuple, rotation: int]
+        Planet: params = [coords: tuple, orbit_radius: int]
         """
-        try: etype = Entity.Type(type_value)
+        try: etype = EntityType(type_value)
         except ValueError: raise PlayerException(f"{self}: tried to place non-existing type {type_value}")
 
         if self.pending_entities[etype] <= 0: raise PlayerException(f"{self} has no {etype} available to place")
         
-        if type_value in (1, 2, 3, 4):
-            entity = Ship(type_value)
+        if etype in (
+            EntityType.CORVETTE,
+            EntityType.FRIGATE,
+            EntityType.DESTROYER,
+            EntityType.CRUISER
+        ):
+            coords = params[0] 
+            rot = params[1]
+            entity = Ship(etype.value)
+            self.field.occupy_cells(entity, coords, rot)
+
+        
+        elif etype == EntityType.PLANET:
+            coords = params[0]
+            orbit_radius = params[1]
+            entity = Planet(orbit_radius, coords)
+            self.field.setup_a_planet(entity)
+
         else: raise PlayerException("Other entities which are not ships are not implemented yet")
 
-        self.field.occupy_cells(entity, coords, rot)
+        
         self.pending_entities[etype] -= 1
         self.entities[entity.eid] = entity
         logger.info(f"{self} placed {self.entities[entity.eid].__repr__()}")
     
-
-    def replace_entity(self, eid: int, coords: tuple, rot: int) -> None:
-        """
-        Allows to replace already placed 
-        """
-        entity = self.get_entity(eid)
-        previous = entity.cells_occupied
-        self.field.occupy_cells(entity, coords, rot)
-        logger.info(f"{self} moved replaced {entity} from {previous} to {entity.cells_occupied}")
 
     
     def normalize_eids(self) -> dict:
@@ -111,13 +119,24 @@ class Player:
             cell = self.field.get_cell(coords)
             
             match (cell.is_void, cell.occupied_by, cell.was_shot):
-                case (True, _, _):          symb = CellStatus.VOID
+                case (True, _, _):
+                    symb = CellStatus.VOID
                 case (_, occupied_by, True):
-                    if occupied_by is None: symb = CellStatus.MISS
-                    else:                   symb = CellStatus.HIT
+                    if occupied_by is None:
+                        symb = CellStatus.MISS
+                    else:
+                        symb = CellStatus.HIT
                 case (_, occupied_by, False):
-                    if private and occupied_by is not None: CellStatus.ENTITY
-                    else:                   symb = CellStatus.FREE
+                    if private and occupied_by is not None:
+                        if occupied_by.type == EntityType.PLANET:
+                            if coords == occupied_by.anchor:
+                                symb = CellStatus.PLANET
+                            else:
+                                symb = CellStatus.ORBIT
+                        else:
+                            symb = CellStatus.ENTITY
+                    else:
+                        symb = CellStatus.FREE
             public_field[coords] = symb
         return public_field
 

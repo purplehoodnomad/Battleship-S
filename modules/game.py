@@ -1,6 +1,5 @@
 from __future__ import annotations
 import logging
-from enum import Enum
 import uuid
 from modules.player import Player
 from modules.entities import Entity
@@ -19,7 +18,8 @@ class Game:
         EntityType.CORVETTE: 4,
         EntityType.FRIGATE: 3,
         EntityType.DESTROYER: 2,
-        EntityType.CRUISER: 1
+        EntityType.CRUISER: 1,
+        EntityType.PLANET: 3
     }
     State = GameState
 
@@ -186,13 +186,20 @@ class Game:
         target = self.get_player(target_name)
         
         result = target.take_shot(coords)
-        if result == CellStatus.HIT: return result
+        if result == CellStatus.HIT:
+            self.order.reverse()
         elif result == CellStatus.DESTROYED:
+            self.order.reverse()
             if all(Entity.Status.DESTROYED == entity.status for entity in target.entities.values()):
                 self.state = self.State.OVER
                 self.winner = shooter.name
         self.turn += 1
-
+        
+        # moving all planets on their orbites when turn proceeds
+        for player in self._players.values():
+            for entity in player.entities.values():
+                if entity.type == EntityType.PLANET:
+                    entity.position += 1
         
         e = self.add_event(
             EventType.SHOT,
@@ -241,11 +248,17 @@ class Game:
         logger.info(f"{self}: state has changed. Turn {self.turn} - {self.whos_turn()} shoots")
 
 
-    def place_entity(self, name: str, entity: int, coords: tuple, rot: int) -> None:
-        
+    def place_entity(self, name: str, entity: int, coords: tuple, r: int) -> None:
+
         self.check_state(self.State.SETUP)
         player = self.get_player(name)
-        player.place_entity(entity, coords, rot)
+
+        # this check is very important because planets take with their orbit large amount of cells
+        # to prevent situation of collision planets with ships - planets must be placed first
+        if player.pending_entities[EntityType.PLANET] > 0 and entity != EntityType.PLANET.value:
+            raise GameException(f"{player} must place planets first")
+        
+        player.place_entity(entity, [coords, r])
     
 
     def autoplace(self, name: str):
@@ -265,8 +278,11 @@ class Game:
                     try:
                         y = random.randint(0, player.field.dimensions["height"] - 1)
                         x = random.randint(0, player.field.dimensions["width"] - 1) 
-                        rot = random.randint(0, 3)
-                        self.place_entity(name, entity.value, (y, x), rot)
+                        if entity == EntityType.PLANET:
+                            r = random.randint(3, int(max(player.field.dimensions["height"], player.field.dimensions["width"])/2))
+                        else: 
+                            r = random.randint(0, 3)
+                        self.place_entity(name, entity.value, (y, x), r)
                         success = True
                     except Exception: continue
         player.normalize_eids()

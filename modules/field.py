@@ -1,6 +1,6 @@
 from __future__ import annotations
 import logging
-from modules.enums_and_events import CellStatus
+from modules.enums_and_events import CellStatus, EntityType, EntityStatus, circle_coords, sort_circle_coords, ngon_coords
 
 
 logger = logging.getLogger(__name__)
@@ -155,59 +155,8 @@ class Field:
             for x in range(size):
                 self._cells[(y, x)] = Cell(y, x)
         
-        circle_coords = self.circle_coords(radius, (radius, radius))
-        self.vodify_corners(circle_coords)
-
-
-    def circle_coords(self, radius: int, center = (0, 0),) -> list:
-        """
-        Uses Bresenghem algorithm to draw circle border with given radius and center.
-        Returns list of (y, x) of drawn edges
-        """
-        y0, x0 = center
-        if radius == 0:
-            return [center]
-
-        circle = set()
-        x = 0
-        y = radius
-        d = 1 - radius
-
-        while x <= y:
-            points_of_symmetry = [
-                (y0 + y, x0 + x), (y0 - y, x0 + x),
-                (y0 + y, x0 - x), (y0 - y, x0 - x),
-                (y0 + x, x0 + y), (y0 - x, x0 + y),
-                (y0 + x, x0 - y), (y0 - x, x0 - y),
-            ]
-            for p in points_of_symmetry:
-                circle.add(p)    
-            if d < 0:
-                d += 2 * x + 3
-            else:
-                d += 2 * (x - y) + 5
-                y -= 1
-            x += 1
-        return circle
-
-    def sort_circle_coords(self, center: tuple, coords) -> list:
-        """
-        Sorts circle coords by angle.
-        Suggests that circle has to gaps.
-        Makes it possible to move planet by iterating coords list.
-        """
-        from math import atan2, pi
-        points_with_angles = []
-        y0, x0 = center
-
-        for point in coords:
-            y, x = point
-            angle = atan2(y - y0, x - x0)
-            if angle < 0: angle += 2 * pi # normilizes to start from 0 to 2pi
-            points_with_angles.append((angle, point))
-
-        points_with_angles.sort(key=lambda point: point[0])
-        return [point for angle, point in points_with_angles]  
+        circle_borders = circle_coords(radius, (radius, radius))
+        self.vodify_corners(circle_borders)
 
 
     def generate_ngon(self, n: int, radius: int, angle = 0.0) -> None:
@@ -215,14 +164,14 @@ class Field:
         Generates polygon field with n vertices and given radius/angle.
         """
         if n < 3: raise FieldException(f"{self}: Polygon must have at least 3 points")
-        ngon_coords = self.ngon_coords(n=n, radius=radius, angle=angle)
-        y_min = min(y for y, _ in ngon_coords)
-        y_max = max(y for y, _ in ngon_coords) - y_min + 1
-        x_min = min(x for _, x in ngon_coords)
-        x_max = max(x for _, x in ngon_coords) - x_min + 1
+        ngon_border = ngon_coords(n=n, radius=radius, angle=angle)
+        y_min = min(y for y, _ in ngon_border)
+        y_max = max(y for y, _ in ngon_border) - y_min + 1
+        x_min = min(x for _, x in ngon_border)
+        x_max = max(x for _, x in ngon_border) - x_min + 1
 
         normalized_coords = []
-        for y, x in ngon_coords:
+        for y, x in ngon_border:
             normalized_coords.append((y-y_min, x-x_min))
         
         self.dimensions ={"height": y_max, "width": x_max}
@@ -230,54 +179,6 @@ class Field:
             for x in range(x_max):
                 self._cells[(y, x)] = Cell(y, x)
         self.vodify_corners(normalized_coords)
-    
-    def ngon_coords(self, /, n: int, radius: int, center = (0, 0), angle = 0) -> list:
-        """
-        Uses Bresenghem algorithm to draw polygon border with given radius, center and angle
-        Returns list of (y, x) of drawn edges
-        """
-        from math import sin, cos, pi, ceil
-        angle = angle/180 * pi
-        y0, x0 = center
-        if radius == 0:
-            return [center]
-        
-        points = []
-        if n == 3:
-            for i in range(n):
-                y = int(ceil(y0 + radius*sin(2*pi*i/n + angle)))
-                x = int(ceil(x0 + radius*cos(2*pi*i/n + angle)))
-                points.append((y, x))
-        else:
-            for i in range(n):
-                y = int(round(y0 + radius*sin(2*pi*i/n + angle)))
-                x = int(round(x0 + radius*cos(2*pi*i/n + angle)))
-                points.append((y, x))       
-        
-        coords = set()
-        for i in range(-1, len(points)-1):
-            y1, x1 = points[i]
-            y2, x2 = points[i+1]
-
-            dx = abs(x2 - x1)
-            dy = abs(y2 - y1)
-            sx = 1 if x1 < x2 else -1
-            sy = 1 if y1 < y2 else -1
-            err = dx - dy
-
-            while True:
-                coords.add((y1, x1))
-                if x1 == x2 and y1 == y2:
-                    break
-                e2 = 2 * err
-                if e2 > -dy:
-                    err -= dy
-                    x1 += sx
-                if e2 < dx:
-                    err += dx
-                    y1 += sy
-
-        return list(coords)      
 
 
     def get_cell(self, coords: tuple) -> Cell:
@@ -314,7 +215,8 @@ class Field:
         if close_cells is not None:
             for coords in close_cells:
                 cell = self.get_cell(coords)
-                if cell.occupied_by is not None: raise FieldException(f"{self}: {cell} too close to {cell.occupied_by}")
+                if cell.occupied_by is not None and cell.occupied_by.type != EntityType.PLANET:
+                    raise FieldException(f"{self}: {cell} too close to {cell.occupied_by}")
 
         for coords in reserved_coords:
             cell = self.get_cell(coords)
@@ -347,6 +249,29 @@ class Field:
                     if coords not in coord_list and coords in self._cells: neighbours.add(coords)
             return neighbours
     
+
+    def setup_a_planet(self, planet):
+        if planet is None: raise FieldException(f"{self}: planet can't be None.")
+        
+        orbit_cells = set()
+        real_cells_counter = 0
+        for coords in planet.orbit_cells:
+            try:
+                cell = self.get_cell(coords)
+            except FieldException: continue
+            
+            if cell.occupied_by is not None:
+                raise FieldException(f"{self}: orbit crosses {coords} is already occupied by {cell.occupied_by}")
+            orbit_cells.add(coords)
+            
+            if not cell.is_void:
+                real_cells_counter += 1
+        
+        if real_cells_counter == 0: raise FieldException(f"{self}: orbit of planet never crosses any field cell. Change center or radius")
+        for coords in orbit_cells:
+            self.get_cell(coords).occupied_by = planet
+        planet.update_state(occupied_cells=list(orbit_cells),status=1)
+
     
     def take_shot(self, coords) -> CellStatus:
         """
@@ -364,14 +289,22 @@ class Field:
         
         cell.was_shot = True
         occupator = cell.occupied_by
-        occupator.make_damage(coords)
-        if occupator.status.value == 3: # 3 = Entity.Type.DESTROYED
-            # filling all nearby as was_shot
-            for close_coords in self.neighbours(occupator.cells_occupied):
-                self.get_cell(close_coords).was_shot = True
-                logger.info(f"{self}: {close_coords} marked as shot next to destroyed entity")
-            return CellStatus.DESTROYED
-        return CellStatus.HIT
+
+        if occupator.type == EntityType.PLANET:
+            if coords == occupator.anchor:
+                return CellStatus.HIT
+            else:
+                return CellStatus.MISS
+        
+        else:
+            occupator.make_damage(coords)
+            if occupator.status == EntityStatus.DESTROYED:
+                # filling all nearby as was_shot
+                for close_coords in self.neighbours(occupator.cells_occupied):
+                    self.get_cell(close_coords).was_shot = True
+                    logger.info(f"{self}: {close_coords} marked as shot next to destroyed entity")
+                return CellStatus.DESTROYED
+            return CellStatus.HIT
         
 
     def __iter__(self):

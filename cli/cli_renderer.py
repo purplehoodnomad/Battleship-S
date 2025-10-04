@@ -32,13 +32,13 @@ class CLIRenderer:
         if self.p1_field is not None: # tries to add latest state of field if player has it
             if names[0] not in self.bots: show_player_ships = True
             else: show_player_ships = show_ships
-            self.p1_field.cells = self.game.get_player_field(names[0], private = show_player_ships)
+            self.p1_field.cells = self.game.get_player_field(names[0], private = True)#show_player_ships)
             screen += self.p1_field.draw()
        
         if self.p2_field is not None:
             if names[1] not in self.bots: show_player_ships = True
             else: show_player_ships = show_ships
-            self.p2_field.cells = self.game.get_player_field(names[1], private = show_player_ships)
+            self.p2_field.cells = self.game.get_player_field(names[1], private = True)#show_player_ships)
             screen += self.p2_field.draw()
 
         screen += self.drawer.draw_separator() # draws board lines and game title
@@ -138,12 +138,12 @@ class CLIRenderer:
         self.game.ready()
         self.talker.talk(self.term.paint("Setup state is running. Use `place` to place your ships.", "orange"), loud = True)
 
-    def place_entity(self, name: str, etype: str, icoords: str, rot: str):
+    def place_entity(self, name: str, etype: str, icoords: str, r: str):
 
         coords = self.convert_input(icoords)
         
-        etype, rot = int(etype), int(rot)
-        self.game.place_entity(name, etype, coords, rot)
+        etype, r = int(etype), int(r)
+        self.game.place_entity(name, etype, coords, r)
         meta = self.game.get_player_meta(name)
         self.talker.talk(f"<{self.term.paint(name, meta["color"])}> placed entity sucsessfully")
     

@@ -16,7 +16,8 @@ class Field:
         # field - is a dict of cells
         # where key is their (y, x) tuple
         self._cells = {}
-        self.dimensions = {"height": -1, "width": -1}
+        self.dimensions = {"height": 0, "width": 0}
+        self.shape = "empty"
         if shape is not None or params is not None: self.generate_field(shape, params)
 
 
@@ -25,7 +26,8 @@ class Field:
 
     def wipe_field(self) -> None:
         self._cells = {}
-        self.dimensions = {"height": -1, "width": -1}
+        self.shape = "empty"
+        self.dimensions = {"height": 0, "width": 0}
         logger.info(f"{self} wiped")
 
 
@@ -37,7 +39,7 @@ class Field:
         return coords in self._cells
     
 
-    def generate_field(self, shape: str, params: list) -> None:
+    def generate_field(self, shape: str|int, params: list) -> None:
         """
         Gets list of shape and generation parameters (width, height, radius etc.)
         This is separate method and not constructor because
@@ -47,17 +49,19 @@ class Field:
         
         if shape is None: raise FieldException(f"{self}: None can't be shape")
         match shape:
-            case "rectangle":
+            case "rectangle"|"1"|1:
                 if len(params) < 2: raise FieldException(f"{self}: No proper rectangle dimensions given")
                 height, width = int(params[0]), int(params[1])
                 self.generate_rectangle(height, width)
+                self.shape = "rectangle"
             
-            case "circle":
+            case "circle"|"2"|2:
                 if len(params) < 1: raise FieldException(f"{self}: No proper circle radius given")
                 radius = int(params[0])
                 self.generate_circle(radius)
+                self.shape = "circle"
             
-            case "triangle":
+            case "triangle"|"3"|3:
                 if len(params) < 1: raise FieldException(f"{self}: No proper triangle size given")
                 radius = int(params[0])
                 try:
@@ -65,8 +69,9 @@ class Field:
                 except IndexError:
                     angle = 0
                 self.generate_ngon(3, radius, angle)
+                self.shape = "triangle"
             
-            case "rhombus":
+            case "rhombus"|"4"|4:
                 if len(params) < 1: raise FieldException(f"{self}: No proper rhombus size given")
                 radius = int(params[0])
                 try:
@@ -74,8 +79,9 @@ class Field:
                 except IndexError:
                     angle = 0
                 self.generate_ngon(4, radius, angle)
+                self.shape = "rhombus"
             
-            case "pentagon":
+            case "pentagon"|"5"|5:
                 if len(params) < 1: raise FieldException(f"{self}: No proper pentagon size given")
                 radius = int(params[0])
                 try:
@@ -83,17 +89,19 @@ class Field:
                 except IndexError:
                     angle = 0
                 self.generate_ngon(5, radius, angle)
+                self.shape = "pentagon"
             
-            case "hexagon":
+            case "hexagon"|"6"|6:
                 if len(params) < 1: raise FieldException(f"{self}: No proper hexagon size given")
                 radius = int(params[0])
                 try:
                     angle = float(params[1])
                 except IndexError:
                     angle = 0
-                self.generate_ngon(6, radius, angle)        
+                self.generate_ngon(6, radius, angle)   
+                self.shape = "hexagon"     
 
-            case "heptagon":
+            case "heptagon"|"7"|7:
                 if len(params) < 1: raise FieldException(f"{self}: No proper heptagon size given")
                 radius = int(params[0])
                 try:
@@ -101,6 +109,7 @@ class Field:
                 except IndexError:
                     angle = 0
                 self.generate_ngon(7, radius, angle)
+                self.shape = "heptagon"
 
             case _:
                 raise FieldException(f"{self}: no {shape} shape supported")
@@ -337,6 +346,8 @@ class Cell:
         
         if self.occupied_by is None:
             state = "o" if self.was_shot else "."
+        elif self.occupied_by == EntityType.PLANET:
+            state = "c"
         else:
             state = "x" if self.was_shot else "■"
             

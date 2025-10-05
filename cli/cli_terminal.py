@@ -90,8 +90,9 @@ class CLIField:
                     case CellStatus.FREE:    symb = "."
                     case CellStatus.MISS:    symb =  self.term.paint("o", "white", side=True)
                     case CellStatus.ENTITY:  symb = self.term.paint("■", self.color)
-                    case CellStatus.ORBIT:   symb = self.term.paint("•", self.color, side=True)
-                    case CellStatus.PLANET:   symb = self.term.paint("@", self.color, side=True)
+                    case CellStatus.ORBIT:   symb = self.term.paint("•", self.color)
+                    case CellStatus.PLANET:  symb = self.term.paint("@", self.color, side=True)
+                    case CellStatus.RELAY:   symb = self.term.paint("#", self.color)
                     case CellStatus.HIT:     symb = self.term.paint("X", self.color)
                 output += self.term.move_yx(y_now + y, x_now+3 + x*2) + symb
         return output     

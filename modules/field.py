@@ -1,12 +1,11 @@
 from __future__ import annotations
 import logging
-from modules.enums_and_events import CellStatus, EntityType, EntityStatus, circle_coords, sort_circle_coords, ngon_coords
+from modules.enums_and_events import CellStatus, EntityType, EntityStatus, circle_coords, sort_circle_coords, ngon_coords, EntityException, FieldException
 
 
 logger = logging.getLogger(__name__)
 
 
-class FieldException(Exception): pass
 class Field:
     """
     Generates playfield, manages it.
@@ -230,7 +229,7 @@ class Field:
             cell.occupied_by = entity
             logger.debug(f"{self}: {cell} state updated.")
         # entity has only right to update it's inner links for convenience
-        entity.update_state(anchor_coords = anchor_coords, occupied_cells = reserved_coords, rotation = rotation, status = 1)
+        entity.update_state(anchor_coords = anchor_coords, occupied_cells = reserved_coords, rotation = rotation, status = EntityStatus.FULLHEALTH)
 
 
     def neighbours(self, coord_list: list) -> set:
@@ -270,7 +269,7 @@ class Field:
         if real_cells_counter == 0: raise FieldException(f"{self}: orbit of planet never crosses any field cell. Change center or radius")
         for coords in orbit_cells:
             self.get_cell(coords).occupied_by = planet
-        planet.update_state(occupied_cells=list(orbit_cells),status=1)
+        planet.update_state(occupied_cells=list(orbit_cells),status=EntityStatus.FULLHEALTH)
 
     
     def take_shot(self, coords) -> CellStatus:
@@ -295,6 +294,10 @@ class Field:
                 return CellStatus.HIT
             else:
                 return CellStatus.MISS
+        
+        elif occupator.type == EntityType.RELAY and occupator.status != EntityStatus.DESTROYED:
+            occupator.make_damage(coords)
+            return CellStatus.RELAY
         
         else:
             occupator.make_damage(coords)

@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 from enum import Enum
 
+class EntityException(Exception): pass
+class FieldException(Exception): pass
+class PlayerException(Exception): pass
+class GameException(Exception): pass
+
 
 class EntityStatus(Enum):
     NOTPLACED = 0
@@ -14,8 +19,8 @@ class EntityType(Enum):
     DESTROYER = 3
     CRUISER = 4
     # BATTLESHIP = 5
-    # RELAY = 11
-    PLANET = 6
+    RELAY = 6
+    PLANET = 7
 
 class GameState(Enum):
     LOBBY = 1
@@ -32,6 +37,7 @@ class CellStatus(Enum):
     DESTROYED = 5
     ORBIT = 6
     PLANET = 7
+    RELAY = 8
 
 class EventType(Enum):
     PLACEMENT = 1

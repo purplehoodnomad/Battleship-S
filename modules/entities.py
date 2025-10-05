@@ -1,16 +1,14 @@
 from __future__ import annotations
 import logging
 from enum import Enum
-from modules.enums_and_events import EntityType, EntityStatus, circle_coords, sort_circle_coords, ngon_coords
+from modules.enums_and_events import EntityType, EntityStatus, circle_coords, sort_circle_coords, ngon_coords, EntityException, FieldException
 
 
 logger = logging.getLogger(__name__)
 
 
-class EntityException(Exception): pass
+
 class Entity:
-    Status = EntityStatus
-    Type = EntityType
 
     _counter = 0 # used to implement entity ids
     def __init__(self):
@@ -23,8 +21,8 @@ class Entity:
         self.cells_damaged = set() # cells which have damage where 0 is anchor
 
         # state and identification
-        self.type = self.Type.UNIDENTIFIED
-        self.status = self.Status.NOTPLACED
+        self.type = EntityType.UNIDENTIFIED
+        self.status = EntityStatus.NOTPLACED
         # metadata
         self.eid = Entity._counter
         Entity._counter += 1
@@ -38,17 +36,17 @@ class Entity:
         if anchor_coords is not None: self.anchor = anchor_coords
         if occupied_cells is not None: self.cells_occupied = occupied_cells
         if rotation is not None: self.rotation = rotation
-        if status is not None: self.status = self.Status(status)
+        if status is not None: self.status = status
         logger.info(f"{self} state updated")
 
 
     def make_damage(self, coords: tuple) -> None:
-        # Field desided that there's entity so cells_occupied MUST contain coords
+        "Field desided that there's entity so cells_occupied MUST contain coords"
         damaged_tile = self.cells_occupied.index(coords)
         self.cells_damaged.add(damaged_tile)
 
-        if self.size == len(self.cells_damaged): self.status = self.Status.DESTROYED
-        else: self.status = self.Status.DAMAGED
+        if self.size == len(self.cells_damaged): self.status = EntityStatus.DESTROYED
+        else: self.status = EntityStatus.DAMAGED
         logger.debug(f"{self} state changed")
 
 
@@ -82,7 +80,7 @@ class Ship(Entity):
     def __init__(self, size: int):
         super().__init__()
         self.size = size
-        self.type = Entity.Type(size)
+        self.type = EntityType(size)
         logger.info(f"{self} created")
 
     def reserve_coords(self, anchor_coords: tuple, rotation: int) -> dict:
@@ -108,7 +106,7 @@ class Planet(Entity):
         self.rotation = choice([1, -1]) # 1=clockwise; -1=counterclockwise
         self.anchor = ()
         self.cells_occupied = [] # basically orbit cell list which are part of field
-        self.type = Entity.Type.PLANET
+        self.type = EntityType.PLANET
 
         self.set_orbit(radius, center)
     
@@ -131,13 +129,11 @@ class Planet(Entity):
 
         value = int(value)
 
-        # первичная установка: если _position ещё не задана — принимаем value как абсолютный индекс
         if not hasattr(self, "_position") or self._position is None:
             self._position = value % length
             self.anchor = self.orbit_cells[self._position]
             return
 
-        # иначе value — это новый абсолютный индекс, вычисляем дельту и применяем направление
         old = self._position
         delta = value - old
         self._position = (old + delta * self.rotation) % length
@@ -160,5 +156,44 @@ class Planet(Entity):
     def __repr__(self):
         return f"eid={self.eid} {self.type}, c={self.orbit_center} r={self.orbit_radius}"
 
-class Construction(Entity):
-    pass
+class Relay(Entity):
+    def __init__(self):
+        super().__init__()
+        self.type = EntityType.RELAY
+    
+    def reserve_coords(self, anchor_coords: tuple, rotation: int) -> dict:
+
+        dydx, rotation = Entity.rotation_manage(rotation)
+        y0, x0 = anchor_coords
+        return {"coords": [((y0 + i*dydx[0]), (x0 + i*dydx[1])) for i in range(self.size)], "rotation": rotation}
+
+
+
+
+
+
+
+
+
+
+
+# class Entity:
+#     Status = EntityStatus
+#     Type = EntityType
+
+#     _counter = 0 # used to implement entity ids
+#     def __init__(self):
+#         # geometry and positioning
+#         self.anchor: tuple = None # (y, x)
+#         self.size = 1
+#         self.rotation: int = None # 0, 1, 2, 3
+#         # reference attributes
+#         self.cells_occupied = [] # list of cell coords
+#         self.cells_damaged = set() # cells which have damage where 0 is anchor
+
+#         # state and identification
+#         self.type = EntityType.UNIDENTIFIED
+#         self.status = EntityStatus.NOTPLACED
+#         # metadata
+#         self.eid = Entity._counter
+#         Entity._counter += 1

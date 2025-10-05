@@ -1,13 +1,13 @@
 import logging
 from modules.field import Field
-from modules.entities import Entity, Ship, Planet
-from modules.enums_and_events import CellStatus, EntityType
+from modules.entities import Entity, Ship, Planet, Relay
+from modules.enums_and_events import CellStatus, EntityType, PlayerException, EntityException, FieldException
 
 
 logger = logging.getLogger(__name__)
 
 
-class PlayerException(Exception): pass
+
 class Player:
     """
     Stores all methods and instances that player can have.
@@ -19,9 +19,9 @@ class Player:
 
         # list of entities which are must be set before game starts
         self.pending_entities = {}
-        for model in list(Entity.Type):
+        for model in list(EntityType):
             self.pending_entities[model] = 0
-        del self.pending_entities[Entity.Type.UNIDENTIFIED]
+        del self.pending_entities[EntityType.UNIDENTIFIED]
 
         self.entities = {} # actual set entities {Entity.eid: Entity}
 
@@ -57,14 +57,19 @@ class Player:
             EntityType.CORVETTE,
             EntityType.FRIGATE,
             EntityType.DESTROYER,
-            EntityType.CRUISER
+            EntityType.CRUISER,
         ):
             coords = params[0] 
             rot = params[1]
             entity = Ship(etype.value)
             self.field.occupy_cells(entity, coords, rot)
 
-        
+        elif etype == EntityType.RELAY:
+            coords = params[0] 
+            rot = params[1]
+            entity = Relay()
+            self.field.occupy_cells(entity, coords, rot)     
+
         elif etype == EntityType.PLANET:
             coords = params[0]
             orbit_radius = params[1]
@@ -133,6 +138,8 @@ class Player:
                                 symb = CellStatus.PLANET
                             else:
                                 symb = CellStatus.ORBIT
+                        elif occupied_by.type == EntityType.RELAY:
+                            symb = CellStatus.RELAY
                         else:
                             symb = CellStatus.ENTITY
                     else:

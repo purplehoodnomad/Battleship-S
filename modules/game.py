@@ -9,17 +9,18 @@ from modules.enums_and_events import *
 logger = logging.getLogger()
 
 
-class GameException(Exception): pass
+
 class Game:
     """
     Manages players and their abilities. Interface for renderer structures - CLI or endpoints
     """
     default_entities = {
-        EntityType.CORVETTE: 4,
-        EntityType.FRIGATE: 3,
-        EntityType.DESTROYER: 2,
-        EntityType.CRUISER: 1,
-        EntityType.PLANET: 3
+        EntityType.CORVETTE: 0,
+        EntityType.FRIGATE: 0,
+        EntityType.DESTROYER: 0,
+        EntityType.CRUISER: 0,
+        EntityType.RELAY: 20,
+        EntityType.PLANET: 0,
     }
     State = GameState
 
@@ -188,6 +189,16 @@ class Game:
         result = target.take_shot(coords)
         if result == CellStatus.HIT:
             self.order.reverse()
+        
+        elif result == CellStatus.RELAY:
+            try:
+                reverse_shot_result = shooter.take_shot(coords)
+                if reverse_shot_result == CellStatus.RELAY:
+                        self.state = self.State.OVER
+                        self.winner = "Infinite relay refraction created a black hole. No one survived."          
+            except:
+                pass
+        
         elif result == CellStatus.DESTROYED:
             self.order.reverse()
             if all(Entity.Status.DESTROYED == entity.status for entity in target.entities.values()):
@@ -284,7 +295,7 @@ class Game:
                             r = random.randint(0, 3)
                         self.place_entity(name, entity.value, (y, x), r)
                         success = True
-                    except Exception: continue
+                    except FieldException: continue
         player.normalize_eids()
     
 

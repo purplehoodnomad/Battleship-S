@@ -25,7 +25,7 @@ class Player:
 
         self.entities = {} # actual set entities {Entity.eid: Entity}
 
-        self.field = None
+        self.field = Field()
         self.colorize(color)
         self.is_ai = False
 
@@ -41,12 +41,13 @@ class Player:
             logger.info(f"{self} tried to be {color}. Changed it to {self.color} instead")
 
 
-    def place_entity(self, type_value: int, params: list) -> None:
+    def place_entity(self, type_value: int, params: list) -> dict:
         """
-        It creates entity instance - that's necessary for attempt to place entity where player has chosen
-        If attempt is not valid - this instace is left to garbage collector and not placed to player.entities dict
-        Ships: params = [coords: tuple, rotation: int]
-        Planet: params = [coords: tuple, orbit_radius: int]
+        It creates entity instance - that's necessary for attempt to place entity where player has chosen.
+        If attempt is not valid - this instace is left to garbage collector and not put to player.entities dict.
+        Ships or Relay: params = [coords: tuple, rotation: int];
+        Planet: params = [coords: tuple, orbit_radius: int].
+        If placed - returns entity metadata dict.
         """
         try: etype = EntityType(type_value)
         except ValueError: raise PlayerException(f"{self}: tried to place non-existing type {type_value}")
@@ -82,6 +83,8 @@ class Player:
         self.pending_entities[etype] -= 1
         self.entities[entity.eid] = entity
         logger.info(f"{self} placed {self.entities[entity.eid].__repr__()}")
+        return entity.metadata
+                
     
 
     

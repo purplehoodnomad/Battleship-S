@@ -155,14 +155,14 @@ def q(self):
     # players setup
     name1 = "hunter1"
     name2 = "hunter2"
-    self.r.set_player(name1, color1, "randomer")
+    self.r.set_player(name1, color1, "hunter")
     self.r.set_player(name2, color2, "randomer")
 
     # field creation for both players
     for name in [name1, name2]:
-        width = "11" # random.randint(9, 26)
+        width = "10" # random.randint(9, 26)
         height = "10" # random.randint(9, 26)
-        self.r.set_player_field(name, "2", [height, "10"])
+        self.r.set_player_field(name, "1", [height, width])
         self.r.game.get_player(name).pending_entities = self.r.game.default_entities.copy()
     
     self.r.proceed_to_setup()

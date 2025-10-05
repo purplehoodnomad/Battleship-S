@@ -40,14 +40,16 @@ class CellStatus(Enum):
     RELAY = 8
 
 class EventType(Enum):
-    PLACEMENT = 1
+    PLACE = 1
     SHOT = 2
     LOBBY = 3
 
 class LobbyEventType(Enum):
+    STATE_CHANGED = 0
     PLAYER_ADDED = 1
     PLAYER_DELETED = 2
     PLAYER_CHANGED = 3
+
 
 
 @dataclass
@@ -70,9 +72,23 @@ class ShotEvent(Event):
 class LobbyEvent(Event):
     player_1: str
     player_2: str
+    turn_order: list
     winner: str
     lobby_event: LobbyEventType
     payload: dict
+
+@dataclass
+class PlaceEvent(Event):
+    player_name: str
+    entity_id: int
+    entity_type: str
+    anchor: tuple
+    rotation: int
+    cells_occupied: list
+    radius: int = None
+    orbit_cells: list = None
+    orbit_center: tuple = None
+
 
 
 

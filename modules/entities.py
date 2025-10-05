@@ -91,22 +91,37 @@ class Ship(Entity):
         # dcit was chosen with goal not to struggle with which index is what
         return {"coords": [((y0 + i*dydx[0]), (x0 + i*dydx[1])) for i in range(self.size)], "rotation": rotation}
 
+    @property
+    def metadata(self) -> dict:
+        return {
+            "eid": self.eid,
+            "etype": self.type,
+            "status": self.status,
+            "size": self.size,
+            "anchor": self.anchor,
+            "rotation": self.rotation,
+            "cells_occupied": self.cells_occupied,
+            "cells_damaged": self.cells_damaged,
+        }
 
     def __repr__(self):
         return f"eid={self.eid} {self.type} {self.status}, a={self.anchor} r={self.rotation}"
 
 
 class Planet(Entity):
-    def __init__(self, radius: int, center: tuple):
+    def __init__(self, radius: int, center: tuple, rotation: int = None):
         super().__init__()
         self.orbit_radius = radius
-        self.orbit_center = ()
-        self.orbit_cells = []
-        from random import choice
-        self.rotation = choice([1, -1]) # 1=clockwise; -1=counterclockwise
-        self.anchor = ()
+        self.orbit_center = () # (y, x) of center
+        self.orbit_cells = [] # all orbit cells (even those not present on field)
+        self.anchor = () # coords of current planet position on orbit
         self.cells_occupied = [] # basically orbit cell list which are part of field
         self.type = EntityType.PLANET
+        if rotation is None:
+            from random import choice
+            self.rotation = choice([1, -1]) # 1=clockwise; -1=counterclockwise
+        # what's fun - sign of rotation defines direction and value defines speed
+        else: self.rotation = rotation
 
         self.set_orbit(radius, center)
     
@@ -114,13 +129,6 @@ class Planet(Entity):
     def position(self) -> int:
         return self._position
 
-    # @position.setter
-    # def position(self, value: int):
-    #     value *= self.rotation
-    #     length = len(self.orbit_cells)
-    #     if not length: return
-    #     self._position = (value + length) % length
-    #     self.anchor = self.orbit_cells[self._position]
     @position.setter
     def position(self, value: int):
         length = len(self.orbit_cells)
@@ -153,6 +161,21 @@ class Planet(Entity):
         self.position = randint(0, len(orbit) - 1)
 
 
+    @property
+    def metadata(self) -> dict:
+        return {
+            "eid": self.eid,
+            "etype": self.type,
+            "status": self.status,
+            "anchor": self.anchor,
+            "rotation": self.rotation,
+            "cells_occupied": self.cells_occupied,
+            "radius": self.orbit_radius,
+            "orbit_cells": self.orbit_cells,
+            "orbit_center": self.orbit_center
+        }
+
+
     def __repr__(self):
         return f"eid={self.eid} {self.type}, c={self.orbit_center} r={self.orbit_radius}"
 
@@ -166,34 +189,16 @@ class Relay(Entity):
         dydx, rotation = Entity.rotation_manage(rotation)
         y0, x0 = anchor_coords
         return {"coords": [((y0 + i*dydx[0]), (x0 + i*dydx[1])) for i in range(self.size)], "rotation": rotation}
-
-
-
-
-
-
-
-
-
-
-
-# class Entity:
-#     Status = EntityStatus
-#     Type = EntityType
-
-#     _counter = 0 # used to implement entity ids
-#     def __init__(self):
-#         # geometry and positioning
-#         self.anchor: tuple = None # (y, x)
-#         self.size = 1
-#         self.rotation: int = None # 0, 1, 2, 3
-#         # reference attributes
-#         self.cells_occupied = [] # list of cell coords
-#         self.cells_damaged = set() # cells which have damage where 0 is anchor
-
-#         # state and identification
-#         self.type = EntityType.UNIDENTIFIED
-#         self.status = EntityStatus.NOTPLACED
-#         # metadata
-#         self.eid = Entity._counter
-#         Entity._counter += 1
+    
+    @property
+    def metadata(self) -> dict:
+        return {
+            "eid": self.eid,
+            "etype": self.type,
+            "status": self.status,
+            "size": self.size,
+            "anchor": self.anchor,
+            "rotation": self.rotation,
+            "cells_occupied": self.cells_occupied,
+            "cells_damaged": self.cells_damaged,
+        }

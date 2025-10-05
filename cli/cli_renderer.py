@@ -55,11 +55,12 @@ class CLIRenderer:
         Tries to add Player instance to Game.
         Prints result.
         """
-        meta = self.game.set_player(name, color)
+        event = self.game.set_player(name, color)
+        payload = event.payload
         if ai is not None:
             if ai == "randomer": self.bots[name] = Randomer(name, self.game)
             else: self.bots[name] = Hunter(name, self.game)
-        self.talker.talk(f"Player <{self.term.paint(meta["name"], meta["color"])}> was created")
+        self.talker.talk(f"Player <{self.term.paint(payload["name"], payload["color"])}> was created")
 
     def get_players(self):
         """
@@ -80,16 +81,17 @@ class CLIRenderer:
         except: self.talker.talk(f"No players. Use 'add playername' first")
 
     def delete_player(self, name):
-        meta = self.game.del_player(name)
+        event = self.game.del_player(name)
+        payload = event.payload
         
-        if meta['order'] == 1:
+        if payload['order'] == 1:
             self.p1_field = self.p2_field
             if self.p1_field is not None: self.p1_field.x0 = 0
         self.p2_field = None
         
         try: del self.bots[name]
         except KeyError: pass
-        self.talker.talk(f"Player <{self.term.paint(meta['name'], meta['color'])}> deleted")
+        self.talker.talk(f"Player <{self.term.paint(payload['name'], payload['color'])}> deleted")
 
     def color(self, name: str, color: str):
         player = self.game.get_player(name)
@@ -103,31 +105,23 @@ class CLIRenderer:
 
 
     def set_player_field(self, name: str, shape: str, params):
-        meta = self.game.get_player_meta(name)
-
-        match shape:
-            case "1": shape = "rectangle"
-            case "2": shape = "circle"
-            case "3": shape = "triangle"
-            case "4": shape = "rhombus"
-            case "5": shape = "pentagon"
-            case "6": shape = "hexagon"
-            case "7": shape = "heptagon"
-            case _: shape = "<WRONG SHAPE ID>"
         if params is None:
             params = [10, 10]
-        self.game.change_player_field(name, shape, params)
+        event = self.game.change_player_field(name, shape, params)
+        payload = event.payload
 
-        order = int(meta["order"])
-        field = CLIField(self.term, int(meta["order"]), meta["name"], meta["color"])
-        if not order:
+        order = payload["order"]
+        color = payload["color"]
+
+        field = CLIField(self.term, order, name, color)
+        if order == 0:
             self.p1_field = field
             self.p1_field.cells = self.game.get_player_field(name, private=True)
         else:
             self.p2_field = field
             self.p2_field.cells = self.game.get_player_field(name, private=True)
 
-        self.talker.talk(f"<{self.term.paint(meta['name'], meta['color'])}> field now is {shape}: {params}")
+        self.talker.talk(f"<{self.term.paint(name, color)}> field now is {shape}: {params}")
     
 
     def entity_amount(self, name, etype, amount):
@@ -182,9 +176,8 @@ class CLIRenderer:
         Can take both coord formats: (y,x) and "A1"
         """
         if not isinstance(coords, tuple): coords = self.convert_input(coords)
-        result = self.game.shoot(shooter, coords)
-        self.talker.talk(f"{shooter} shot {coords}. Result - {result}")
-        return result
+        event = self.game.shoot(shooter, coords)
+        self.talker.talk(f"{shooter} shot {coords}. Result - {event.shot_result}")
 
 
     def automove(self, name: str) -> str:

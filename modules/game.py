@@ -15,12 +15,12 @@ class Game:
     Manages players and their abilities. Interface for renderer structures - CLI or endpoints
     """
     default_entities = {
-        EntityType.CORVETTE: 0,
-        EntityType.FRIGATE: 0,
-        EntityType.DESTROYER: 0,
-        EntityType.CRUISER: 0,
-        EntityType.RELAY: 20,
-        EntityType.PLANET: 0,
+        EntityType.CORVETTE: 4,
+        EntityType.FRIGATE: 2,
+        EntityType.DESTROYER: 1,
+        EntityType.CRUISER: 1,
+        EntityType.RELAY: 3,
+        EntityType.PLANET: 1,
     }
     State = GameState
 
@@ -35,7 +35,7 @@ class Game:
         self.events = []
 
     
-    def add_event(self, event_type: EventType, **kwargs):
+    def add_event(self, event_type: EventType, **kwargs) -> Event:
         """
         Forms all event types and adds them to self.event history
         """
@@ -48,8 +48,9 @@ class Game:
                     event_type=event_type,
                     player_1=names[0] if names else None,
                     player_2=names[1] if len(names) > 1 else None,
+                    turn_order=self.order,
                     winner=self.winner,
-                    lobby_event=kwargs["lobby_event_type"],
+                    lobby_event=kwargs["lobby_event"],
                     payload=kwargs["payload"],
                 )
             case EventType.SHOT:
@@ -62,18 +63,35 @@ class Game:
                     coords=kwargs["coords"],
                     shot_result=kwargs["shot_result"],
                 )
+            case EventType.PLACE:
+                try:
+                    radius = kwargs["radius"]
+                    orbit_cells = kwargs["orbit_cells"]
+                    orbit_center = kwargs["orbit_center"]
+                except KeyError:
+                    radius = None
+                    orbit_cells = None
+                    orbit_center = None
+                e = PlaceEvent(
+                    game_state=self.state,
+                    event_type=event_type,
+                    player_name=kwargs["player_name"],
+                    entity_id=kwargs["entity_id"],
+                    entity_type=kwargs["entity_type"],
+                    anchor=kwargs["anchor"],
+                    rotation=kwargs["rotation"],
+                    cells_occupied=kwargs["cells_occupied"],
+                    radius=radius,
+                    orbit_cells=orbit_cells,
+                    orbit_center=orbit_center,
+                )
         self.events.append(e)
+        logger.info(e)
         return e
 
-    def whos_turn(self) -> str:
-        """
-        Converts current turn into index and returns name of player.
-        """
-        if not self.order: raise GameException("Order is empty. No players set")
-        return self.order[(self.turn) % len(self.order)]
        
 
-    def set_player(self, name: str, color: str) -> dict:
+    def set_player(self, name: str, color: str) -> LobbyEvent:
         """
         Returns created player metadata. Names are unique identificators.
         """
@@ -87,31 +105,13 @@ class Game:
         self._players[player.name] = player
         self.order.append(player.name)
 
-        logger.info(f"{self}: Player: {player} was set.")
-        logger.info(f"{self}: player order: {self.order}.")
+        event = self.add_event(
+            EventType.LOBBY,
+            lobby_event=LobbyEventType.PLAYER_ADDED,
+            payload=self.get_player_meta(player.name)
+        )
+        return event
 
-        payload = {
-            "added_player": name,
-            "added_player_turn": self.order.index(player.name)
-        }
-        self.add_event(EventType.LOBBY, lobby_event_type=LobbyEventType.PLAYER_ADDED, payload=payload)
-        return self.get_player_meta(player.name)
-    
-
-    def del_player(self, name: str) -> None:
-        self.check_state(self.State.LOBBY)
-        meta = self.get_player_meta(name)
-
-        del self.order[self.order.index(name)]
-        del self._players[name]
-
-        payload = {
-            "deleted_player": name
-        }
-        self.add_event(EventType.LOBBY, lobby_event_type=LobbyEventType.PLAYER_DELETED, payload=payload)
-        
-        return meta
-    
 
     def get_player(self, name: str) -> Player:
         """
@@ -122,30 +122,42 @@ class Game:
         try: return self._players[name]
         except KeyError: raise GameException(f"No Player {name} in game")
 
-    
-    def get_player_names(self) -> list:
-        if not self._players: raise GameException("No players in current game")
-        return list(self._players.keys())
-    
-    
+
     def get_player_meta(self, name: str) -> dict:
         """
         Safely provides neccesary player information.
         """
         player = self.get_player(name)
-        meta = {
+        return {
             "name": player.name,
             "color": player.color,
             "order": self.order.index(player.name),
             "is_ai": player.is_ai,
-            "pending": {} # dict of pending entities
+            "pending": player.pending_entities,
+            "field_settings": {
+                "shape": player.field.shape,
+                "height": player.field.dimensions["height"],
+                "width": player.field.dimensions["width"]
+            }
         }
-        for etype, amount in player.pending_entities.items():
-            meta["pending"][str(etype).replace("Type.", "").capitalize()] = amount
-        return meta
-    
+  
 
-    def change_entity_list(self, name: str, types: dict) -> dict:
+    def del_player(self, name: str) -> LobbyEvent:
+        self.check_state(self.State.LOBBY)
+        meta = self.get_player_meta(name)
+
+        del self.order[self.order.index(name)]
+        del self._players[name]
+
+        event = self.add_event(
+            EventType.LOBBY,
+            lobby_event=LobbyEventType.PLAYER_DELETED,
+            payload=meta
+        )
+        return event
+      
+
+    def change_entity_list(self, name: str, types: dict) -> LobbyEvent:
         """
         Changes entities amount which are present in types dict.
         """
@@ -159,21 +171,109 @@ class Game:
                 elif int(amount) < 0: amount = 0
                 else: amount = int(amount)
                 player.pending_entities[etype] = int(amount)
-        return player.pending_entities
-    
-    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! НЕ ПРОБОВАЛ
-    def replace_entity(self, name, eid, coords, rot):
-        self.check_state(self.State.SETUP)
+
+        event = self.add_event(
+            EventType.LOBBY,
+            lobby_event=LobbyEventType.PLAYER_CHANGED,
+            payload=self.get_player_meta(name)
+        )
+        return event
+
+
+    def change_player_field(self, name: str, shape: str, params: list) -> LobbyEvent:
+        self.check_state(self.State.LOBBY)
         player = self.get_player(name)
-        player.replace_entity(eid, coords, rot)
+        player.set_field(shape, params)
+        event = self.add_event(
+            EventType.LOBBY,
+            lobby_event=LobbyEventType.PLAYER_CHANGED,
+            payload=self.get_player_meta(name)
+        )
+        return event
 
 
     def get_player_field(self, name: str, *, private = False) -> dict:
         player = self.get_player(name)
         return player.get_field(private=private)
-    
 
-    def shoot(self, shooter_name: str, coords: tuple) -> str:
+
+
+    def place_entity(self, name: str, entity: int, coords: tuple, r: int) -> PlaceEvent:
+        """
+        Tries to place entity to coords with rotation or radius r.
+        If no GameException or FieldException met - returns event dict.
+        """
+        self.check_state(self.State.SETUP)
+        player = self.get_player(name)
+
+        # this check is very important because planets take with their orbit large amount of cells
+        # to prevent situation of collision planets with ships - planets must be placed first
+        if player.pending_entities[EntityType.PLANET] > 0 and entity != EntityType.PLANET.value:
+            raise GameException(f"{player} must place planets first")
+        
+        entity_metadata = player.place_entity(entity, [coords, r])
+        if entity_metadata["etype"] == EntityType.PLANET:
+            radius = entity_metadata["radius"]
+            orbit_cells = entity_metadata["orbit_cells"]
+            orbit_center = entity_metadata["orbit_center"]
+        else:
+            radius = None
+            orbit_cells = None
+            orbit_center = None
+        
+        event = self.add_event(
+            EventType.PLACE,
+            player_name=name,
+            entity_id=entity_metadata["eid"],
+            entity_type=entity_metadata["etype"],
+            anchor=entity_metadata["anchor"],
+            rotation=entity_metadata["rotation"],
+            cells_occupied=entity_metadata["cells_occupied"],
+            radius=radius,
+            orbit_cells=orbit_cells,
+            orbit_center=orbit_center,
+        )
+        return event
+
+
+    def autoplace(self, name: str) -> tuple:
+        """
+        Autoplaces all remaining ships.
+        Returns tuple: list of dicts or placement events proceeded during autoplace and summary.
+        """
+        import random
+        player = self.get_player(name)
+        autoplace_events = []
+        attempts_limit = 50000
+        all_attempts_counter = 0
+
+        for entity, amount in player.pending_entities.items().__reversed__(): # starts with big ones first
+            if amount == 0: continue
+            counter = 0
+            for _ in range(amount):
+                success = False
+                while not success:
+                    if counter >= attempts_limit:
+                        return (autoplace_events, f"Unable to autoplace all entities - Too many iterations took for {entity} ({attempts_limit})")
+                    
+                    counter += 1
+                    all_attempts_counter += 1
+                    try:
+                        y = random.randint(0, player.field.dimensions["height"] - 1)
+                        x = random.randint(0, player.field.dimensions["width"] - 1) 
+                        if entity == EntityType.PLANET:
+                            r = random.randint(3, int(max(player.field.dimensions["height"], player.field.dimensions["width"])/2))
+                        else: 
+                            r = random.randint(0, 3)
+                        event = self.place_entity(name, entity.value, (y, x), r)
+                        autoplace_events.append(event)
+                        success = True
+                    except FieldException: continue
+        
+        return (autoplace_events, f"Autoplacement successfull. Took {all_attempts_counter} iterations in total.")
+
+
+    def shoot(self, shooter_name: str, coords: tuple) -> ShotEvent:
 
         self.check_state(self.State.ACTIVE)
         shooter = self.get_player(shooter_name)
@@ -212,24 +312,28 @@ class Game:
                 if entity.type == EntityType.PLANET:
                     entity.position += 1
         
-        e = self.add_event(
+        event = self.add_event(
             EventType.SHOT,
             shooter=shooter_name,
             target=target_name,
             coords=coords,
             shot_result=result
         )
-        logger.warning(e)
-        return result
-        
-
-    def change_player_field(self, name: str, shape: str, params: list) -> None:
-        self.check_state(self.State.LOBBY)
-        player = self.get_player(name)
-        player.set_field(shape, params)
+        return event
 
 
-    def ready(self) -> None:
+
+    def normalize_eids(self) -> None:
+        """
+        Placing wrong creates a lot of gc instances
+        This method brings eid back to numeration from 0
+        """
+        if not self._players: raise GameException("Unable to normalize eids: No players")
+        for player in self._players.values():
+            player.normalize_eids()
+
+
+    def ready(self) -> LobbyEvent:
         """
         Tries to proceed to setup state if possible.
         """
@@ -243,11 +347,19 @@ class Game:
                 counter += amount
             if counter == 0: raise GameException(f"Can't initialize setup state: {player} doesn't have pending entities list")
 
+        previous_state = self.state
         self.state = self.State.SETUP
-        logger.info(f"{self}: state has changed. Players must place ships")
+        
+        event = self.add_event(
+            EventType.LOBBY,
+            lobby_event=LobbyEventType.STATE_CHANGED,
+            payload={
+                "previous_state": previous_state
+            }
+        )
+        return event
 
-
-    def start(self) -> None:
+    def start(self) -> LobbyEvent:
         self.check_state(self.State.SETUP)
 
         for player in self._players.values():
@@ -255,60 +367,30 @@ class Game:
             for amount_unplaced in player.pending_entities.values():
                 if amount_unplaced != 0: raise GameException(f"{player} hasn't placed all their entities")
         
+        previous_state = self.state
         self.state = self.State.ACTIVE
-        logger.info(f"{self}: state has changed. Turn {self.turn} - {self.whos_turn()} shoots")
-
-
-    def place_entity(self, name: str, entity: int, coords: tuple, r: int) -> None:
-
-        self.check_state(self.State.SETUP)
-        player = self.get_player(name)
-
-        # this check is very important because planets take with their orbit large amount of cells
-        # to prevent situation of collision planets with ships - planets must be placed first
-        if player.pending_entities[EntityType.PLANET] > 0 and entity != EntityType.PLANET.value:
-            raise GameException(f"{player} must place planets first")
         
-        player.place_entity(entity, [coords, r])
+        event = self.add_event(
+            EventType.LOBBY,
+            lobby_event=LobbyEventType.STATE_CHANGED,
+            payload={
+                "previous_state": previous_state
+            }
+        )
+        return event
+
+
+    def get_player_names(self) -> list:
+        if not self._players: raise GameException("No players in current game")
+        return list(self._players.keys())
+  
+    def whos_turn(self) -> str:
+        """
+        Converts current turn into index and returns name of player.
+        """
+        if not self.order: raise GameException("Order is empty. No players set")
+        return self.order[(self.turn) % len(self.order)]
     
-
-    def autoplace(self, name: str):
-        """
-        Autoplaces all remain ships
-        """
-        import random
-        player = self.get_player(name)
-        for entity, amount in player.pending_entities.items().__reversed__(): # starts with big ones first
-            if amount == 0: continue
-            counter = 0
-            for _ in range(amount):
-                success = False
-                while not success:
-                    if counter >= 50000: raise ValueError("Unable to autoplace entities - Too many iterations")
-                    counter += 1
-                    try:
-                        y = random.randint(0, player.field.dimensions["height"] - 1)
-                        x = random.randint(0, player.field.dimensions["width"] - 1) 
-                        if entity == EntityType.PLANET:
-                            r = random.randint(3, int(max(player.field.dimensions["height"], player.field.dimensions["width"])/2))
-                        else: 
-                            r = random.randint(0, 3)
-                        self.place_entity(name, entity.value, (y, x), r)
-                        success = True
-                    except FieldException: continue
-        player.normalize_eids()
-    
-
-    def normalize_eids(self) -> None:
-        """
-        Placing wrong creates a lot of gc instances
-        This method brings eid back to numeration from 0
-        """
-        if not self._players: raise GameException("Unable to normalize eids: No players")
-        for player in self._players.values():
-            player.normalize_eids()
-
-
     def whos_winner(self) -> str:
         try:
             self.check_state(self.State.OVER)

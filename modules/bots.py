@@ -17,18 +17,19 @@ class Bot(ABC):
         """
         Modificates game player instance to mark it as AI
         """
-        player = game.get_player(name)
+        player = game._get_player(name)
         player.is_ai = True
+        self.opponent_field = {}
 
 
-    def get_free_coords(self, field: dict) -> list:
+    def get_free_coords(self) -> list:
         """
         Returns list of (y,x) which are not void and not shot yet
         """
-        return [coords for coords, state in field.items() if state == CellStatus.FREE]
+        return [coords for coords, state in self.opponent_field.items() if state == CellStatus.FREE]
     
 
-    def get_neighbours(self, coords: tuple, field: dict) -> list:
+    def get_neighbours(self, coords: tuple) -> list:
         """
         Returns list of closest (y,x) to given coords on opponent's field
         """
@@ -39,7 +40,7 @@ class Bot(ABC):
                         (0,-1),          (0,1),
                                  (1,0)]]
         # picks from cross coordinates which are in actual field
-        return [coord for coord in cross_neighbours if coord in field]
+        return [coord for coord in cross_neighbours if coord in self.opponent_field]
 
     @abstractmethod
     def shoot(self, field: dict) -> tuple:
@@ -57,8 +58,8 @@ class Randomer(Bot):
         super().__init__(name, game)
         logger.info(f"{name} is now Randomer Bot")
 
-    def shoot(self, field: dict) -> tuple:
-        shot_available = self.get_free_coords(field)
+    def shoot(self) -> tuple[int, int]:
+        shot_available = self.get_free_coords()
         shot = random.choice(shot_available)
         logger.debug(f"RandomerBot chose to shoot {shot} from {len(shot_available)} free cells")
         return shot
@@ -77,7 +78,7 @@ class Hunter(Bot):
         logger.info(f"{name} is now Hunter Bot")
         
 
-    def hunt_validation(self, field: dict) -> list:
+    def hunt_validation(self) -> list[tuple[int, int]]:
         """
         Validates coordinates from hunting set to be shootable 
         """
@@ -85,20 +86,20 @@ class Hunter(Bot):
         
         validated = []
         for coords in list(self.hunt):
-            if field[coords] == CellStatus.FREE:
+            if self.opponent_field[coords] == CellStatus.FREE:
                 validated.append(coords)
         self.hunt = validated
         return self.hunt
 
 
-    def shoot(self, field: dict) -> tuple:
-        if self.last_shot is not None and field[self.last_shot] == CellStatus.HIT:
-            self.hunt.extend([coords for coords in self.get_neighbours(self.last_shot, field) if coords not in self.hunt])
+    def shoot(self) -> tuple[int, int]:
+        if self.last_shot is not None and self.opponent_field[self.last_shot] == CellStatus.HIT:
+            self.hunt.extend([coords for coords in self.get_neighbours(self.last_shot) if coords not in self.hunt])
             logger.debug(f"HunterBot is in hunt mode. Hunting for {self.hunt}")
 
-        shot_available = self.hunt_validation(field)
+        shot_available = self.hunt_validation()
         if not shot_available:
-            shot_available = self.get_free_coords(field)
+            shot_available = self.get_free_coords()
             logger.debug(f"HunterBot is in random mode")
         self.last_shot = random.choice(shot_available)
         logger.debug(f"HunterBot chose to shoot {self.last_shot} from {len(shot_available)} free cells")

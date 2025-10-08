@@ -24,9 +24,7 @@ class CLIIO:
             if self.game_active:
                 for bot_name in self.r.bots.keys():
                     try:
-                        result = "hit"
-                        while result == "hit":
-                            result = self.r.automove(bot_name)
+                        self.r.automove(bot_name)
                     except Exception as e:
                         self.talker.talk(e)
                         continue
@@ -101,7 +99,7 @@ def field(self, name, shape_id = 1, *params):
 def getships(self, name, *flag):
         meta = self.r.game.get_player_meta(name)
         if flag: # for debugging
-            self.r.game.get_player(name).pending_entities = self.r.game.default_entities.copy()
+            self.r.game._get_player(name).pending_entities = self.r.game.default_entities.copy()
         else:
             for etype in list(Game.default_entities):
                 
@@ -153,22 +151,31 @@ def q(self):
     color1, color2 = colors[:2]
 
     # players setup
-    name1 = "hunter1"
-    name2 = "hunter2"
-    self.r.set_player(name1, color1, "hunter")
+    name1 = "randomer"
+    name2 = "hunter"
+    self.r.set_player(name1, color1, "randomer")
     self.r.set_player(name2, color2, "randomer")
 
     # field creation for both players
     for name in [name1, name2]:
-        width = "10" # random.randint(9, 26)
-        height = "10" # random.randint(9, 26)
-        self.r.set_player_field(name, "1", [height, width])
-        self.r.game.get_player(name).pending_entities = self.r.game.default_entities.copy()
+        width = "7" # random.randint(9, 26)
+        height = "7" # random.randint(9, 26)
+        self.r.set_player_field(name, "2", [height, width])
+        for type, amount in self.r.game.default_entities.items():
+            self.r.entity_amount(name, type, amount)
     
+
     self.r.proceed_to_setup()
     for name in (name1, name2):
+        # self.r.place_entity(name, "planet", "A7", "2")
+        # self.r.place_entity(name, "planet", "G7", "4")
+        # self.r.place_entity(name, "planet", "E7", "2")
+        # self.r.place_entity(name, "corvette", "A1", "0")
         self.r.autoplace(name)
+    self.upd()
     
+    # self.r.start()
+    # self.game_active = True
 
     self.upd()
 

@@ -34,7 +34,7 @@ class CellStatus(Enum):
     MISS = 2
     ENTITY = 3
     HIT = 4
-    DESTROYED = 5
+    # DESTROYED = 5
     ORBIT = 6
     PLANET = 7
     RELAY = 8
@@ -66,7 +66,8 @@ class ShotEvent(Event):
     shooter: str
     target: str
     coords: tuple
-    shot_result: CellStatus
+    shot_results: dict[tuple[int, int], CellStatus]
+    planets_anchors: list[tuple[int, int]]
 
 @dataclass
 class LobbyEvent(Event):
@@ -121,7 +122,7 @@ def circle_coords(radius: int, center = (0, 0)) -> list:
             d += 2 * (x - y) + 5
             y -= 1
         x += 1
-    return circle
+    return list(circle)
 
 def sort_circle_coords(center: tuple, coords) -> list:
     """

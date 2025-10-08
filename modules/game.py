@@ -15,14 +15,13 @@ class Game:
     Manages players and their abilities. Interface for renderer structures - CLI or endpoints
     """
     default_entities = {
-        EntityType.CORVETTE: 4,
-        EntityType.FRIGATE: 2,
-        EntityType.DESTROYER: 1,
+        EntityType.CORVETTE: 5,
+        EntityType.FRIGATE: 3,
+        EntityType.DESTROYER: 2,
         EntityType.CRUISER: 1,
         EntityType.RELAY: 3,
-        EntityType.PLANET: 1,
+        EntityType.PLANET: 2,
     }
-    State = GameState
 
 
     def __init__(self):
@@ -30,14 +29,17 @@ class Game:
         self._players = {}
         self.order = [] # order of turns ("name")
         self.turn = 0
-        self.state = self.State.LOBBY
+        self.state = GameState.LOBBY
         self.winner: str = None
         self.events = []
 
     
-    def add_event(self, event_type: EventType, **kwargs) -> Event:
+    def add_event(self, event_type: EventType, **kwargs) -> LobbyEvent|PlaceEvent|ShotEvent:
         """
-        Forms all event types and adds them to self.event history
+        Forms all event types and adds them to self.event history.
+        Events store all information required to reproduce all states of game.
+        It's suggested - renderers use events to draw information on clients.
+        Some information is private - can't be sent directly to clients.
         """
         match event_type:
             case EventType.LOBBY:
@@ -61,7 +63,8 @@ class Game:
                     shooter=kwargs["shooter"],
                     target=kwargs["target"],
                     coords=kwargs["coords"],
-                    shot_result=kwargs["shot_result"],
+                    shot_results=kwargs["shot_results"],
+                    planets_anchors=kwargs["planets_anchors"]
                 )
             case EventType.PLACE:
                 try:
@@ -93,14 +96,15 @@ class Game:
 
     def set_player(self, name: str, color: str) -> LobbyEvent:
         """
-        Returns created player metadata. Names are unique identificators.
+        Names are unique identificators.
         """
-        self.check_state(self.State.LOBBY)
+        self.check_state(GameState.LOBBY)
 
         if len(self._players) >= 2: raise GameException("Game supports 2 players only.")
         
-        if str(name) in self._players: name = str(uuid.uuid4())[:3] # guarantees unique names
-        player = Player(name[:10], color) # slices player name for more convenient readable size
+        if str(name) in self._players:
+            raise GameException(f"{name} is already in game. Give unique name")
+        player = Player(name, color) 
         
         self._players[player.name] = player
         self.order.append(player.name)
@@ -113,10 +117,10 @@ class Game:
         return event
 
 
-    def get_player(self, name: str) -> Player:
+    def _get_player(self, name: str) -> Player:
         """
         Allows to get access to player instance directly.
-        If there's no special need - it's better to use get_player_meta().
+        Used by game. To give safe information further - use get_player_meta().
         """
         if not self._players: raise GameException("No players in current game")
         try: return self._players[name]
@@ -127,23 +131,22 @@ class Game:
         """
         Safely provides neccesary player information.
         """
-        player = self.get_player(name)
+        player = self._get_player(name)
         return {
             "name": player.name,
             "color": player.color,
             "order": self.order.index(player.name),
             "is_ai": player.is_ai,
             "pending": player.pending_entities,
-            "field_settings": {
-                "shape": player.field.shape,
-                "height": player.field.dimensions["height"],
-                "width": player.field.dimensions["width"]
-            }
+            "shape": player.field.shape,
+            "height": player.field.dimensions["height"],
+            "width": player.field.dimensions["width"],
+            "real_cells": player.field.useful_cells_coords
         }
   
 
     def del_player(self, name: str) -> LobbyEvent:
-        self.check_state(self.State.LOBBY)
+        self.check_state(GameState.LOBBY)
         meta = self.get_player_meta(name)
 
         del self.order[self.order.index(name)]
@@ -155,14 +158,29 @@ class Game:
             payload=meta
         )
         return event
+    
+
+    def change_player_color(self, name: str, color: str) -> LobbyEvent:
+        """
+        Allows to change color any time (even midgame).
+        """
+        player = self._get_player(name)
+        player.colorize(color)
+        
+        event = self.add_event(
+            EventType.LOBBY,
+            lobby_event=LobbyEventType.PLAYER_CHANGED,
+            payload=self.get_player_meta(name)
+        )
+        return event
       
 
     def change_entity_list(self, name: str, types: dict) -> LobbyEvent:
         """
-        Changes entities amount which are present in types dict.
+        Changes entities amount for player which are present in types dict.
         """
-        player = self.get_player(name)
-        self.check_state(self.State.LOBBY)
+        player = self._get_player(name)
+        self.check_state(GameState.LOBBY)
 
         for etype, amount in types.items():
             if etype in self.default_entities:
@@ -181,8 +199,9 @@ class Game:
 
 
     def change_player_field(self, name: str, shape: str, params: list) -> LobbyEvent:
-        self.check_state(self.State.LOBBY)
-        player = self.get_player(name)
+        
+        self.check_state(GameState.LOBBY)
+        player = self._get_player(name)
         player.set_field(shape, params)
         event = self.add_event(
             EventType.LOBBY,
@@ -192,26 +211,26 @@ class Game:
         return event
 
 
-    def get_player_field(self, name: str, *, private = False) -> dict:
-        player = self.get_player(name)
-        return player.get_field(private=private)
+    # TODO NOT USED. REMOVE OR REFACTOR LATER
+    # def get_player_field(self, name: str, *, private = False) -> dict:
+    #     player = self._get_player(name)
+    #     return player.get_field(private=private)
 
 
-
-    def place_entity(self, name: str, entity: int, coords: tuple, r: int) -> PlaceEvent:
+    def place_entity(self, name: str, etype: EntityType, coords: tuple, r: int) -> PlaceEvent:
         """
         Tries to place entity to coords with rotation or radius r.
         If no GameException or FieldException met - returns event dict.
         """
-        self.check_state(self.State.SETUP)
-        player = self.get_player(name)
+        self.check_state(GameState.SETUP)
+        player = self._get_player(name)
 
         # this check is very important because planets take with their orbit large amount of cells
         # to prevent situation of collision planets with ships - planets must be placed first
-        if player.pending_entities[EntityType.PLANET] > 0 and entity != EntityType.PLANET.value:
+        if player.pending_entities[EntityType.PLANET] > 0 and etype != EntityType.PLANET:
             raise GameException(f"{player} must place planets first")
         
-        entity_metadata = player.place_entity(entity, [coords, r])
+        entity_metadata = player.place_entity(etype, [coords, r])
         if entity_metadata["etype"] == EntityType.PLANET:
             radius = entity_metadata["radius"]
             orbit_cells = entity_metadata["orbit_cells"]
@@ -236,13 +255,13 @@ class Game:
         return event
 
 
-    def autoplace(self, name: str) -> tuple:
+    def autoplace(self, name: str) -> tuple[list[PlaceEvent], str]:
         """
         Autoplaces all remaining ships.
         Returns tuple: list of dicts or placement events proceeded during autoplace and summary.
         """
         import random
-        player = self.get_player(name)
+        player = self._get_player(name)
         autoplace_events = []
         attempts_limit = 50000
         all_attempts_counter = 0
@@ -265,7 +284,7 @@ class Game:
                             r = random.randint(3, int(max(player.field.dimensions["height"], player.field.dimensions["width"])/2))
                         else: 
                             r = random.randint(0, 3)
-                        event = self.place_entity(name, entity.value, (y, x), r)
+                        event = self.place_entity(name, entity, (y, x), r)
                         autoplace_events.append(event)
                         success = True
                     except FieldException: continue
@@ -273,94 +292,153 @@ class Game:
         return (autoplace_events, f"Autoplacement successfull. Took {all_attempts_counter} iterations in total.")
 
 
-    def shoot(self, shooter_name: str, coords: tuple) -> ShotEvent:
-
-        self.check_state(self.State.ACTIVE)
-        shooter = self.get_player(shooter_name)
-        if self.whos_turn() != shooter_name: raise GameException(f"{shooter_name} cant shoot now, it's {self.whos_turn()}'s turn")
+    def shoot(self, shooter: str, coords: tuple) -> list[ShotEvent]:
+        """
+        Initiates shoot event and return results for both players.
+        Returns 2 events in list: first is for target field and the second is for shooter itself.
+        (Planet movements, relay refractions)
+        """
+        
+        # checking for game conditions and getting shooter's instance
+        self.check_state(GameState.ACTIVE)
+        shooter = self._get_player(shooter)
+        if self.whos_turn() != shooter.name: raise GameException(f"{shooter.name} cant shoot now, it's {self.whos_turn()}'s turn")
 
         # getting opponent's instance
         names = self.get_player_names()
-        if len(names) != 2: raise GameException(f"Can't get opponent of {shooter_name}, player count {len(names)}!=2")
-        del names[names.index(shooter_name)]
-        target_name = names[0]
-        target = self.get_player(target_name)
-        
+        names.remove(shooter.name)
+        target = self._get_player(names[0])
+
+        # shoot event itself
         result = target.take_shot(coords)
-        if result == CellStatus.HIT:
-            self.order.reverse()
         
-        elif result == CellStatus.RELAY:
-            try:
-                reverse_shot_result = shooter.take_shot(coords)
-                if reverse_shot_result == CellStatus.RELAY:
-                        self.state = self.State.OVER
-                        self.winner = "Infinite relay refraction created a black hole. No one survived."          
-            except:
-                pass
-        
-        elif result == CellStatus.DESTROYED:
-            self.order.reverse()
-            if all(Entity.Status.DESTROYED == entity.status for entity in target.entities.values()):
-                self.state = self.State.OVER
-                self.winner = shooter.name
+        target_field_updates, shooter_field_updates = {}, {}
+        match result:
+            case CellStatus.MISS:
+                target_field_updates.update({coords: result})
+            
+            case CellStatus.HIT:
+                target_field_updates.update({coords: result})
+                self.order.reverse() # next turn will start from shooter player again
+                
+                # checking if game ended
+                if all(EntityStatus.DESTROYED == entity.status for entity in target.entities.values()):
+                    self.state = GameState.OVER
+                    self.winner = shooter.name
+            
+            case CellStatus.RELAY:
+                # making reflected shot into same coordinates
+                try:
+                    reverse_shot_result = shooter.take_shot(coords)
+                    shooter_field_updates.update({coords: reverse_shot_result})
+                    
+                    # checking unique game ending - infinite reflection
+                    if reverse_shot_result == CellStatus.RELAY:
+                        self.state = GameState.OVER
+                        self.winner = "Black Hole"
+                except FieldException:
+                    pass # if reflected shot hits already shot cell or void one
+        # moving game further
         self.turn += 1
-        
-        # moving all planets on their orbites when turn proceeds
+
+        target_planets_positions, shooter_planets_positions = [], []
+        # moving planets
         for player in self._players.values():
-            for entity in player.entities.values():
-                if entity.type == EntityType.PLANET:
-                    entity.position += 1
-        
-        event = self.add_event(
+            planet_movement_results = player.move_planets(1)
+            for coords, status in planet_movement_results.items():
+                if status == CellStatus.HIT:
+                    if player == target:
+                        target_field_updates.update(planet_movement_results)
+                    else:
+                        shooter_field_updates.update(planet_movement_results)
+                else:
+                    if player == target:
+                        target_planets_positions.append(coords)
+                    else:
+                        shooter_planets_positions.append(coords)
+
+        target_event = self.add_event(
             EventType.SHOT,
-            shooter=shooter_name,
-            target=target_name,
+            shooter="Relay and Planets reaction",
+            target=shooter.name,
             coords=coords,
-            shot_result=result
+            shot_results=shooter_field_updates,
+            planets_anchors=shooter_planets_positions
         )
-        return event
+        shooter_event = self.add_event(
+            EventType.SHOT,
+            shooter=shooter.name,
+            target=target.name,
+            coords=coords,
+            shot_results=target_field_updates,
+            planets_anchors=target_planets_positions
+        )
+
+        return (shooter_event, target_event)
 
 
-
-    def normalize_eids(self) -> None:
-        """
-        Placing wrong creates a lot of gc instances
-        This method brings eid back to numeration from 0
-        """
-        if not self._players: raise GameException("Unable to normalize eids: No players")
-        for player in self._players.values():
-            player.normalize_eids()
+    # TODO NOT USED: REMOVE OR REFACTOR
+    # def normalize_eids(self) -> None:
+    #     """
+    #     Placing wrong creates a lot of gc instances
+    #     This method brings eid back to numeration from 0
+    #     """
+    #     if not self._players: raise GameException("Unable to normalize eids: No players")
+    #     for player in self._players.values():
+    #         player.normalize_eids()
 
 
     def ready(self) -> LobbyEvent:
         """
         Tries to proceed to setup state if possible.
+        TODO: move sizes into entity instance
         """
-        self.check_state(self.State.LOBBY)
+        self.check_state(GameState.LOBBY)
         if len(self._players) != 2: raise GameException("Must be 2 players to initialize setup state")
+        sizes = {
+            EntityType.CORVETTE: 1,
+            EntityType.FRIGATE: 2,
+            EntityType.DESTROYER: 3,
+            EntityType.CRUISER: 4,
+            EntityType.PLANET: 1,
+            EntityType.RELAY: 1,
+        }
+
+        players_meta = []
 
         for player in self._players.values():
-            if player.field is None: raise GameException(f"Can't initialize setup state: {player} doesn't have a field")
-            counter = 0
-            for amount in player.pending_entities.values():
-                counter += amount
-            if counter == 0: raise GameException(f"Can't initialize setup state: {player} doesn't have pending entities list")
+            cells_available = len(player.field.useful_cells_coords)
+            if cells_available == 0:
+                raise GameException(f"Can't initialize setup state: {player} doesn't have a field")
+
+            estimated_cells = 0
+            for etype, amount in player.pending_entities.items():
+                estimated_cells += 3.15 * amount * sizes[etype]
+            if estimated_cells >= cells_available:
+                raise GameException(f"Can't initialize setup state: {player} wouldn't be able to place all it's entities. Change amount or entity types {estimated_cells}>={cells_available}")
+            if estimated_cells == 0:
+                raise GameException(f"Can't initialize setup state: {player} doesn't have pending entities list")
+            players_meta.append(self.get_player_meta(player.name))
 
         previous_state = self.state
-        self.state = self.State.SETUP
+        self.state = GameState.SETUP
         
         event = self.add_event(
             EventType.LOBBY,
             lobby_event=LobbyEventType.STATE_CHANGED,
             payload={
-                "previous_state": previous_state
+                "previous_state": previous_state,
+                players_meta[0]["name"]: players_meta[0],
+                players_meta[1]["name"]: players_meta[1],
             }
         )
         return event
 
     def start(self) -> LobbyEvent:
-        self.check_state(self.State.SETUP)
+        """
+        Tries to proceed to active state if possible.
+        """
+        self.check_state(GameState.SETUP)
 
         for player in self._players.values():
             if len(player.entities.values()) == 0: raise GameException(f"{player} doesn't have any placed entities")
@@ -368,19 +446,46 @@ class Game:
                 if amount_unplaced != 0: raise GameException(f"{player} hasn't placed all their entities")
         
         previous_state = self.state
-        self.state = self.State.ACTIVE
+        self.state = GameState.ACTIVE
         
+        players_meta = []
+        for name, player in self._players.items():
+            updated_meta = self.get_player_meta(name)
+            entities = []
+            planets = []
+            orbit_cells = set()
+            
+            for entity in player.entities.values():
+                entities.append((entity.type, entity.cells_occupied))
+                if entity.type == EntityType.PLANET:
+                    planets.append(entity.anchor)
+                    for coords in entity.orbit_cells:
+                        orbit_cells.add(coords)
+
+            updated_meta.update({
+                "entities": entities,
+                "planets": planets,
+                "orbit_cells": list(orbit_cells)
+            })
+            players_meta.append(updated_meta)
+        
+                
         event = self.add_event(
             EventType.LOBBY,
             lobby_event=LobbyEventType.STATE_CHANGED,
             payload={
-                "previous_state": previous_state
+                "previous_state": previous_state,
+                players_meta[0]["name"]: players_meta[0],
+                players_meta[1]["name"]: players_meta[1],
             }
         )
         return event
 
 
-    def get_player_names(self) -> list:
+    def get_player_names(self) -> list[str]:
+        """
+        Returns list of names present in game.
+        """
         if not self._players: raise GameException("No players in current game")
         return list(self._players.keys())
   
@@ -393,11 +498,11 @@ class Game:
     
     def whos_winner(self) -> str:
         try:
-            self.check_state(self.State.OVER)
+            self.check_state(GameState.OVER)
             return self.winner
         except GameException: return
 
-    def check_state(self, state: Game.State) -> None:
+    def check_state(self, state: GameState) -> None:
         """
         Raises error if current state not match expected one.
         """

@@ -83,7 +83,7 @@ class Ship(Entity):
         self.type = EntityType(size)
         logger.info(f"{self} created")
 
-    def reserve_coords(self, anchor_coords: tuple, rotation: int) -> dict:
+    def reserve_coords(self, anchor_coords: tuple, rotation: int) -> dict[str, tuple[int, int]|str]:
 
         dydx, rotation = Entity.rotation_manage(rotation)
         y0, x0 = anchor_coords
@@ -115,6 +115,7 @@ class Planet(Entity):
         self.orbit_center = () # (y, x) of center
         self.orbit_cells = [] # all orbit cells (even those not present on field)
         self.anchor = () # coords of current planet position on orbit
+        self.position = 0
         self.cells_occupied = [] # basically orbit cell list which are part of field
         self.type = EntityType.PLANET
         if rotation is None:
@@ -135,8 +136,6 @@ class Planet(Entity):
         if length == 0:
             return
 
-        value = int(value)
-
         if not hasattr(self, "_position") or self._position is None:
             self._position = value % length
             self.anchor = self.orbit_cells[self._position]
@@ -147,8 +146,26 @@ class Planet(Entity):
         self._position = (old + delta * self.rotation) % length
         self.anchor = self.orbit_cells[self._position]
 
+    
+    @property
+    def status(self):
+        return self._status
+    
+    @status.setter # removes anchor point upon destruction
+    def status(self, value: EntityStatus):
+        if not isinstance(value, EntityStatus):
+            raise EntityException(f"{value} is not EntityStatus")
+        if value == EntityStatus.DESTROYED:
+            self.anchor = ()
+            self._status = value
+        else:
+            self._status = value
 
-    def set_orbit(self, radius: int, center: tuple) -> None:
+
+    def set_orbit(self, radius: int, center: tuple[int, int]) -> None:
+        """
+        Generates orbit cells and saves them in planet instance.
+        """
         if radius == 0:
             self.orbit_center = center
             self.orbit_cells = [center]
@@ -179,12 +196,14 @@ class Planet(Entity):
     def __repr__(self):
         return f"eid={self.eid} {self.type}, c={self.orbit_center} r={self.orbit_radius}"
 
+
+
 class Relay(Entity):
     def __init__(self):
         super().__init__()
         self.type = EntityType.RELAY
     
-    def reserve_coords(self, anchor_coords: tuple, rotation: int) -> dict:
+    def reserve_coords(self, anchor_coords: tuple, rotation: int) -> dict[str, tuple[int, int]|str]:
 
         dydx, rotation = Entity.rotation_manage(rotation)
         y0, x0 = anchor_coords

@@ -1,7 +1,9 @@
-from blessed import Terminal
+import logging
 from functools import partial
+from blessed import Terminal
 from modules.enums_and_events import CellStatus
 
+logger = logging.getLogger(__name__)
 
 class STerminal:
     """
@@ -34,68 +36,80 @@ class STerminal:
 
 
 class CLIField:
-    FIELD_SIZE_Y = 27 # 26 + 1
-    FIELD_SIZE_X = 56 # 2*26 + 4
-
-    
-    def __init__(self, term: STerminal, position: int, name: str, color: str):
-        self.y0 = 0
-        if not position: self.x0 = 0
-        else: self.x0 = CLIField.FIELD_SIZE_X
-        self.name = name
-        self.color = color
+    def __init__(self, term: STerminal, cells_to_draw: list[tuple[int, int]], height: int, width: int):
         self.term = term
-        self._cells = {}
-        self.height = None
-        self.width = None
-    
+        self.height = height
+        self.width = width
+        
+        # this separation is made so planets upon moving not erasig data what was under them before
+        self.cells = {coord: CellStatus.FREE for coord in cells_to_draw} # cells of general entity objects
+        self.orbits = [] # orbit cells are side-layered - the're drewn under the main objects (misses, hits)
+        self.planets = [] # planets always move they're on the highest layer
 
-    @property
-    def cells(self): return(self._cells)
 
-    @cells.setter
-    def cells(self, value):
-        self._cells = value
-        self.height = max([coords[0] for coords in value.keys()]) + 1
-        self.width = max([coords[1] for coords in value.keys()]) + 1      
+    def mark_cells_as(self, cells, cell_status: CellStatus):
+        """
+        Changes status of given cells in local self.cells storage.
+        It's supposed that events update information.
+        """
+        for coords in cells:
+            if not isinstance(coords, tuple):
+                raise ValueError(f"Coords expected to be in (y, x) format, not {coords}")
+            if coords not in self.cells:
+                continue
+            self.cells[coords] = cell_status
 
-    
-    def wipe(self):
-        line = " " * CLIField.FIELD_SIZE_X
-        wiper = ""
-        for y in range(CLIField.FIELD_SIZE_Y):
-            wiper += (self.term.move_yx(self.y0 + y, self.x0) + line)
-        return wiper
 
-    def draw(self):
-        if self.width is None or self.height is None: return
-        y_now = self.y0 + (CLIField.FIELD_SIZE_Y - 1 - self.height) // 2
-        x_now = self.x0 + (CLIField.FIELD_SIZE_X - 4 - self.width*2) // 2
+    def draw(self, lu: tuple[int, int], color: str):
+        """
+        Draws field from given lu coordinates of left upper corner.
+        """
+        if not self.cells:
+            return ""
+        y0, x0 = lu
+        
+        y_now = y0
+        x_now = x0
         output = ""
 
         # letter row printer
         for x in range(self.width):
             letter = chr(x + 65) # → A, B, C ...
-            output += f"{self.term.move_yx(y_now, x_now + x*2 + 3)}{self.term.paint(letter, 'white', side=True)}"
+            output += f"{self.term.move_yx(y_now, x_now + x*2 + 3)}{self.term.paint(letter, 'white', side=False)}"
         y_now += 1 # drawing field itself under the row
 
         for y in range(self.height):
             # every line starts with a number
-            output += self.term.move_yx(y_now + y, x_now) + self.term.paint(y+1, "white", side=True)
+            output += self.term.move_yx(y_now + y, x_now) + self.term.paint(y+1, "white", side=False)
             
             for x in range(self.width):
                 symb = ""
-                match self.cells[(y, x)]:
-                    case CellStatus.VOID:    symb = " "
-                    case CellStatus.FREE:    symb = "."
-                    case CellStatus.MISS:    symb =  self.term.paint("o", "white", side=True)
-                    case CellStatus.ENTITY:  symb = self.term.paint("■", self.color)
-                    case CellStatus.ORBIT:   symb = self.term.paint("•", self.color)
-                    case CellStatus.PLANET:  symb = self.term.paint("@", self.color, side=True)
-                    case CellStatus.RELAY:   symb = self.term.paint("#", self.color)
-                    case CellStatus.HIT:     symb = self.term.paint("X", self.color)
+                coords = (y, x)
+
+                if coords not in self.cells:
+                    output += self.term.move_yx(y_now + y, x_now+3 + x*2) + " "
+                    continue
+                else:
+                    symb = "."
+                
+                if coords in self.orbits:
+                    symb = self.term.paint("•", color)
+                
+                match self.cells[coords]:
+                    case CellStatus.MISS:
+                        if coords in self.orbits:
+                            symb = self.term.paint("o", color, side=True)
+                        else:
+                            symb = self.term.paint("o", "white", side=True)
+                    case CellStatus.ENTITY:  symb = self.term.paint("■", color)
+                    case CellStatus.RELAY:   symb = self.term.paint("#", color)
+                    case CellStatus.HIT:     symb = self.term.paint("X", color)
+
+                if coords in self.planets:
+                    symb = self.term.paint("@", color, side=True)             
+                
                 output += self.term.move_yx(y_now + y, x_now+3 + x*2) + symb
-        return output     
+        return output
 
 
 class CLIDrawer:
@@ -106,18 +120,10 @@ class CLIDrawer:
     def __init__(self, term: STerminal):
         self.term = term
 
-    def draw_separator(self):
-        horizontal = self.term.move_yx(CLIField.FIELD_SIZE_Y, 0) + "─" * self.term.width
-        
-        vertical = ""
-        x = CLIField.FIELD_SIZE_X * 2
-        for y in range(CLIField.FIELD_SIZE_Y + 1):
-            vertical += self.term.move_yx(y, x) + "│"
-        vertical = vertical[:-1] + "┴"
-
-        title = self.term.move_yx(CLIField.FIELD_SIZE_Y, CLIField.FIELD_SIZE_X * 2 + 6) + r"→ Battleship-S ←" # r"⚝ 𝗕𝗮𝘁𝘁𝗹𝗲𝘀𝗵𝗶𝗽-𝗦 ⚝"
-
-        return horizontal + vertical + self.term.paint(title, "white", side=False)      
+    def draw_separator(self, y: int, x: int):
+        horizontal = self.term.move_yx(y, x) + "─" * self.term.width
+        # title = self.term.move_yx(CLIField.FIELD_SIZE_Y, CLIField.FIELD_SIZE_X * 2 + 6) + r"→ Battleship-S ←" # r"⚝ 𝗕𝗮𝘁𝘁𝗹𝗲𝘀𝗵𝗶𝗽-𝗦 ⚝"
+        return horizontal  
 
     def wipe_screen(self):
         return self.term.move_yx(0, 0) + self.term.clear
@@ -126,7 +132,7 @@ class CLIDrawer:
 class CLITalker:
     def __init__(self, term: STerminal):
         self.term = term
-        self.y0 = CLIField.FIELD_SIZE_Y + 1
+        self.y0 = 30 + 1
         self.x0 = 0
         self.history = ["", "", "", "", "", "", "", "", ""]
     

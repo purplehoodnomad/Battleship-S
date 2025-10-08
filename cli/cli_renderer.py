@@ -1,7 +1,10 @@
+import logging
 from cli.cli_terminal import STerminal, CLIDrawer, CLIField, CLITalker
 from modules.game import Game
 from modules.bots import Randomer, Hunter
+from modules.enums_and_events import CellStatus, EntityType
 
+logger = logging.getLogger(__name__)
 
 class CLIRenderer:
     def __init__(self, term: STerminal):
@@ -9,8 +12,7 @@ class CLIRenderer:
         self.game = Game()
         self.talker = CLITalker(term)
         self.drawer = CLIDrawer(term)
-        self.p1_field: CLIField = None
-        self.p2_field: CLIField = None
+        self.players: dict[str, dict]= {} # {name: {info: value}}
         self.bots = {} # {playername: BotType}
     
 
@@ -29,19 +31,16 @@ class CLIRenderer:
         winner = self.game.whos_winner() # used to show winscreen and decide whether or not showing enemy ships
         show_ships = winner is not None
 
-        if self.p1_field is not None: # tries to add latest state of field if player has it
-            if names[0] not in self.bots: show_player_ships = True
-            else: show_player_ships = show_ships
-            self.p1_field.cells = self.game.get_player_field(names[0], private = True)#show_player_ships)
-            screen += self.p1_field.draw()
-       
-        if self.p2_field is not None:
-            if names[1] not in self.bots: show_player_ships = True
-            else: show_player_ships = show_ships
-            self.p2_field.cells = self.game.get_player_field(names[1], private = True)#show_player_ships)
-            screen += self.p2_field.draw()
-
-        screen += self.drawer.draw_separator() # draws board lines and game title
+        y, x = 0, 0
+        y_end = y
+        if self.players:
+            for player in self.players.values():
+                screen += player["field"].draw((y, x), player["color"])
+                x += player["width"] * 2 + 4
+                y_end = max((y_end, player["height"]))
+        y = y_end + 1
+        x = 0
+        screen += self.drawer.draw_separator(y, x) # draws board lines and game title
         screen += self.talker.talk() # prints all line history available
 
         if winner is not None:
@@ -56,101 +55,119 @@ class CLIRenderer:
         Prints result.
         """
         event = self.game.set_player(name, color)
-        payload = event.payload
+        player = self.players[name] = event.payload
+        player["field"] = CLIField(self.term, player["real_cells"], player["height"], player["width"])
+
         if ai is not None:
-            if ai == "randomer": self.bots[name] = Randomer(name, self.game)
-            else: self.bots[name] = Hunter(name, self.game)
-        self.talker.talk(f"Player <{self.term.paint(payload["name"], payload["color"])}> was created")
+            if ai == "randomer":
+                self.bots[name] = Randomer(name, self.game)
+            elif ai == "hunter":
+                self.bots[name] = Hunter(name, self.game)
+
+        self.talker.talk(f"<{self.term.paint(name, self.players[name]['color'])}> added")
 
     def get_players(self):
         """
         Prints a list of all added players.
         """
-        try:
-            output = "Players:\n"
-            names = self.game.get_player_names()
-            
-            for name in names:
-                meta = self.game.get_player_meta(name)
-                output += f"  > {self.term.paint(meta['name'], meta['color'])}:\t"
-                for etype, amount in meta["pending"].items():
-                    output += f"{etype}: {amount}, "
-                output = output[:-2] + "\n"
+        output = "Players:\n"
+        if not self.players:
+            self.talker.talk("No players in game. Type `add`")
+            return
+        
+        for name in self.players:
+            output += f"  > {self.term.paint(name, self.players[name]["color"])}:\t"
+            output = output[:-2] + "\n"
 
-            self.talker.talk(output.strip("\n"))
-        except: self.talker.talk(f"No players. Use 'add playername' first")
+        self.talker.talk(output.strip("\n"))
 
     def delete_player(self, name):
         event = self.game.del_player(name)
         payload = event.payload
         
-        if payload['order'] == 1:
-            self.p1_field = self.p2_field
-            if self.p1_field is not None: self.p1_field.x0 = 0
-        self.p2_field = None
+        del self.players[name]
         
-        try: del self.bots[name]
-        except KeyError: pass
-        self.talker.talk(f"Player <{self.term.paint(payload['name'], payload['color'])}> deleted")
+        if payload['order'] == 0:
+            for name in self.players.keys():
+                self.players[name]["order"] -= 1
+        
+        self.talker.talk(f"<{self.term.paint(payload['name'], payload['color'])}> deleted")
 
     def color(self, name: str, color: str):
-        player = self.game.get_player(name)
-        player.colorize(color)
-        meta = self.game.get_player_meta(name)
-        if meta["order"] == 0:
-            if self.p1_field is not None: self.p1_field.color = meta["color"]
-        else:
-            if self.p2_field is not None: self.p2_field.color = meta["color"]
-        self.talker.talk(f"{self.term.paint(name, color)} color changed")
+        event = self.game.change_player_color(name, color)
+        self.players[name].update(event.payload)
+        self.talker.talk(f"<{self.term.paint(name, color)}> color changed")
 
 
-    def set_player_field(self, name: str, shape: str, params):
-        if params is None:
-            params = [10, 10]
+    def set_player_field(self, name: str, shape: str, params = [9, 9]):
+
         event = self.game.change_player_field(name, shape, params)
-        payload = event.payload
-
-        order = payload["order"]
-        color = payload["color"]
-
-        field = CLIField(self.term, order, name, color)
-        if order == 0:
-            self.p1_field = field
-            self.p1_field.cells = self.game.get_player_field(name, private=True)
-        else:
-            self.p2_field = field
-            self.p2_field.cells = self.game.get_player_field(name, private=True)
-
-        self.talker.talk(f"<{self.term.paint(name, color)}> field now is {shape}: {params}")
+        player = self.players[name] = event.payload
+        player["field"] = CLIField(self.term, player["real_cells"], player["height"], player["width"])
+        self.talker.talk(f"<{self.term.paint(name, self.players[name]["color"])}> field now is {shape}: {params}")
     
 
     def entity_amount(self, name, etype, amount):
-        self.game.change_entity_list(name, {etype: amount})
+        event = self.game.change_entity_list(name, {etype: amount})
+        self.players[name].update(event.payload)
 
     
     def proceed_to_setup(self):
-        self.game.ready()
+        event = self.game.ready()
+        payload = event.payload
+        
+        for name in self.game.get_player_names():
+            player_data = payload[name]
+            self.players[name].update(payload[name])
+            self.players[name]["field"] = CLIField(self.term, player_data["real_cells"], player_data["height"], player_data["width"])
+        
         self.talker.talk(self.term.paint("Setup state is running. Use `place` to place your ships.", "orange"), loud = True)
-
-    def place_entity(self, name: str, etype: str, icoords: str, r: str):
+    
+    
+    def place_entity(self, name: str, type_value: str, icoords: str, r: str):
+        match type_value.upper():
+            case "1"|"CORVETTE":
+                etype = EntityType.CORVETTE
+            case "2"|"FRIGATE":
+                etype = EntityType.FRIGATE
+            case "3"|"DESTROYER":
+                etype = EntityType.DESTROYER
+            case "4"|"CRUISER":
+                etype = EntityType.CRUISER
+            case "6"|"RELAY":
+                etype = EntityType.RELAY
+            case "7"|"PLANET":
+                etype = EntityType.PLANET
+            case _:
+                etype = EntityType.UNIDENTIFIED
 
         coords = self.convert_input(icoords)
-        
-        etype, r = int(etype), int(r)
-        self.game.place_entity(name, etype, coords, r)
-        meta = self.game.get_player_meta(name)
-        self.talker.talk(f"<{self.term.paint(name, meta["color"])}> placed entity sucsessfully")
+        event = self.game.place_entity(name, etype, coords, int(r))
+        if etype == EntityType.PLANET:
+            self.players[name]["field"].orbits.append(event.orbit_cells)
+            self.players[name]["field"].planets.append(event.anchor)
+        else:
+            self.players[name]["field"].mark_cells_as(event.cells_occupied, CellStatus.ENTITY)
+
+        self.talker.talk(f"<{self.term.paint(name, self.players[name]["color"])}> placed entity sucsessfully")
     
 
     def autoplace(self, name: str):
         """
         Autoplaces all remain ships
         """
-        self.game.autoplace(name)
-        self.talker.talk(f"Autoplaced ships for <{name}>")
+        events, result = self.game.autoplace(name)
+        for event in events:
+            if event.entity_type == EntityType.PLANET:
+                self.players[name]["field"].orbits.append(event.orbit_cells)
+                self.players[name]["field"].planets.append(event.anchor)
+            else:
+                self.players[name]["field"].mark_cells_as(event.cells_occupied, CellStatus.ENTITY)
+
+        self.talker.talk(f"<{name}>: {result}")
 
 
-    def convert_input(self, coords: str):
+    def convert_input(self, coords: str) -> tuple[int, int]:
         """
         Converts human input to game expected parameters.
         E.g. A10 to (9, 0); J2 to (3, 9)
@@ -164,26 +181,69 @@ class CLIRenderer:
                 break
         if X_coord is None: raise ValueError("Coordinates must be in 'CRR' format")
         return (Y_coord, X_coord)
-    
+
 
     def start(self):
-        self.game.start()
+        event = self.game.start()
+        payload = event.payload
+        
+        for name in self.players.keys():
+            player_data = payload[name]
+            self.players[name].update(player_data)
+            self.players[name]["field"] = CLIField(self.term, player_data["real_cells"], player_data["height"], player_data["width"])
+            self.players[name]["field"].orbits = player_data["orbit_cells"]
+            self.players[name]["field"].planets = player_data["planets"]
+            
+            for entity, cells_occupied in player_data["entities"]:
+                if entity == EntityType.RELAY:
+                    self.players[name]["field"].mark_cells_as(cells_occupied, CellStatus.RELAY)
+                elif entity == EntityType.PLANET:
+                    continue
+                else:
+                    self.players[name]["field"].mark_cells_as(cells_occupied, CellStatus.ENTITY)
+
+        
         self.talker.talk(self.term.paint("Game started. Use `sh` to shoot.", "blue"), loud = True)
 
     
-    def shoot(self, shooter: str, coords):
+    def shoot(self, shooter: str, coords: tuple[int, int] | str):
         """
         Can take both coord formats: (y,x) and "A1"
         """
-        if not isinstance(coords, tuple): coords = self.convert_input(coords)
-        event = self.game.shoot(shooter, coords)
-        self.talker.talk(f"{shooter} shot {coords}. Result - {event.shot_result}")
+        if isinstance(coords, str):
+            coords = self.convert_input(coords)
+        
+        events = self.game.shoot(shooter, coords)
+        for event in events:
+            for coords, result in event.shot_results.items():
+                self.players[event.target]["field"].mark_cells_as([coords], result)
+                self.players[event.target]["field"].planets = event.planets_anchors
+        
+        self.talker.talk(f"{shooter} shot {coords}")
+
+        return events
 
 
     def automove(self, name: str) -> str:
-        if name not in self.bots: return
-        names = self.game.get_player_names()
-        del names[names.index(name)]
-        victim = names[0]
-        bots_coords_choose = self.bots[name].shoot(self.game.get_player_field(victim))
-        return self.shoot(name, bots_coords_choose)
+        if name not in self.bots:
+            return
+
+        names = list(self.players.keys())
+        if name not in names:
+            return
+        names.remove(name)
+        if not names:
+            return
+        target = names[0]
+
+        bot = self.bots[name]
+        if not bot.opponent_field:
+            bot.opponent_field = {coords: CellStatus.FREE for coords in self.players[target]["real_cells"]}
+
+        bots_coords_choose = self.bots[name].shoot()
+        events = self.shoot(name, bots_coords_choose)
+        for event in events:
+            if event.target != name:
+                for coords, result in event.shot_results.items():
+                    if result in (CellStatus.MISS, CellStatus.HIT):
+                        bot.opponent_field[coords] = result

@@ -64,7 +64,8 @@ class Game:
                     target=kwargs["target"],
                     coords=kwargs["coords"],
                     shot_results=kwargs["shot_results"],
-                    planets_anchors=kwargs["planets_anchors"]
+                    planets_anchors=kwargs["planets_anchors"],
+                    destroyed_cells=kwargs["destroyed_cells"]
                 )
             case EventType.PLACE:
                 try:
@@ -132,12 +133,19 @@ class Game:
         Safely provides neccesary player information.
         """
         player = self._get_player(name)
+
+        destroyed_cells = []
+        for entity in player.entities.values():
+            if entity.status == EntityStatus.DESTROYED and entity.type != EntityType.PLANET:
+                for coords in entity.cells_occupied:
+                    destroyed_cells.append(coords)
+        
         return {
             "name": player.name,
             "color": player.color,
             "order": self.order.index(player.name),
-            "is_ai": player.is_ai,
             "pending": player.pending_entities,
+            "destroyed_cells": destroyed_cells,
             "shape": player.field.shape,
             "height": player.field.dimensions["height"],
             "width": player.field.dimensions["width"],
@@ -320,13 +328,9 @@ class Game:
             case CellStatus.HIT:
                 target_field_updates.update({coords: result})
                 self.order.reverse() # next turn will start from shooter player again
-                
-                # checking if game ended
-                if all(EntityStatus.DESTROYED == entity.status for entity in target.entities.values()):
-                    self.state = GameState.OVER
-                    self.winner = shooter.name
             
             case CellStatus.RELAY:
+                target_field_updates.update({coords: CellStatus.HIT})
                 # making reflected shot into same coordinates
                 try:
                     reverse_shot_result = shooter.take_shot(coords)
@@ -356,14 +360,29 @@ class Game:
                         target_planets_positions.append(coords)
                     else:
                         shooter_planets_positions.append(coords)
-
+        
+        if not self.winner or self.winner is None:
+                # checking if game ended
+                shooter_is_destroyed = all(EntityStatus.DESTROYED == entity.status for entity in shooter.entities.values() if entity.type != EntityType.PLANET)
+                target_is_destroyed = all(EntityStatus.DESTROYED == entity.status for entity in target.entities.values() if entity.type != EntityType.PLANET)
+                if shooter_is_destroyed and target_is_destroyed:
+                    self.state = GameState.OVER
+                    self.winner = "Draw"
+                elif shooter_is_destroyed:
+                    self.state = GameState.OVER
+                    self.winner = target.name
+                elif target_is_destroyed:
+                    self.state = GameState.OVER
+                    self.winner = shooter.name  
+        
         target_event = self.add_event(
             EventType.SHOT,
             shooter="Relay and Planets reaction",
             target=shooter.name,
             coords=coords,
             shot_results=shooter_field_updates,
-            planets_anchors=shooter_planets_positions
+            planets_anchors=shooter_planets_positions,
+            destroyed_cells=self.get_player_meta(shooter.name)["destroyed_cells"]
         )
         shooter_event = self.add_event(
             EventType.SHOT,
@@ -371,9 +390,11 @@ class Game:
             target=target.name,
             coords=coords,
             shot_results=target_field_updates,
-            planets_anchors=target_planets_positions
+            planets_anchors=target_planets_positions,
+            destroyed_cells=self.get_player_meta(target.name)["destroyed_cells"]
         )
-
+        logger.info(self.get_player_meta(shooter.name)["destroyed_cells"])
+        logger.info(self.get_player_meta(target.name)["destroyed_cells"])
         return (shooter_event, target_event)
 
 

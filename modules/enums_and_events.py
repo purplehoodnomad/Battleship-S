@@ -68,6 +68,7 @@ class ShotEvent(Event):
     coords: tuple
     shot_results: dict[tuple[int, int], CellStatus]
     planets_anchors: list[tuple[int, int]]
+    destroyed_cells: list[tuple[int, int]]
 
 @dataclass
 class LobbyEvent(Event):

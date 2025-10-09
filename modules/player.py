@@ -27,7 +27,6 @@ class Player:
 
         self.field = Field()
         self.colorize(color)
-        self.is_ai = False
 
         logger.info(f"{self} created")
     

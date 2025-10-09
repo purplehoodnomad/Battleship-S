@@ -60,9 +60,9 @@ class CLIRenderer:
 
         if ai is not None:
             if ai == "randomer":
-                self.bots[name] = Randomer(name, self.game)
+                self.bots[name] = Randomer()
             elif ai == "hunter":
-                self.bots[name] = Hunter(name, self.game)
+                self.bots[name] = Hunter()
 
         self.talker.talk(f"<{self.term.paint(name, self.players[name]['color'])}> added")
 
@@ -181,6 +181,15 @@ class CLIRenderer:
                 break
         if X_coord is None: raise ValueError("Coordinates must be in 'CRR' format")
         return (Y_coord, X_coord)
+    
+    def invert_output(self, coords: tuple[int, int]) -> str:
+        """
+        
+        """
+        y, x = coords
+        letter = chr(x + ord("A"))
+        num = str(y + 1)
+        return letter + num
 
 
     def start(self):
@@ -214,26 +223,34 @@ class CLIRenderer:
             coords = self.convert_input(coords)
         
         events = self.game.shoot(shooter, coords)
+        results = {}
         for event in events:
+            results[event.target] = []
             for coords, result in event.shot_results.items():
                 self.players[event.target]["field"].mark_cells_as([coords], result)
+                results[event.target].append((coords, result))
                 self.players[event.target]["field"].planets = event.planets_anchors
         
-        self.talker.talk(f"{shooter} shot {coords}")
+        self.talker.talk(f"{shooter} shot {self.invert_output(coords)}.")
+
+        output: dict[str, str] = {}
+        for name, shots in results.items():
+            parts: list[str] = []
+            for position, status in shots:
+                parts.append(f"{self.invert_output(position)}: {str(status).replace('CellStatus.', '')}")
+            output[name] = ";\n".join(parts) + (";" if parts else "")
+
+        self.talker.talk(f" Results: {output}")
 
         return events
 
 
-    def automove(self, name: str) -> str:
+    def automove(self, name: str):
         if name not in self.bots:
             return
 
         names = list(self.players.keys())
-        if name not in names:
-            return
         names.remove(name)
-        if not names:
-            return
         target = names[0]
 
         bot = self.bots[name]
@@ -243,7 +260,10 @@ class CLIRenderer:
         bots_coords_choose = self.bots[name].shoot()
         events = self.shoot(name, bots_coords_choose)
         for event in events:
-            if event.target != name:
+            if event.target == target:
                 for coords, result in event.shot_results.items():
                     if result in (CellStatus.MISS, CellStatus.HIT):
-                        bot.opponent_field[coords] = result
+                        bot.shot_result(coords, result)
+                bot.validate_destruction(event.destroyed_cells)
+                break
+                    

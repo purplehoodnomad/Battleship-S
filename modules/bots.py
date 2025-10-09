@@ -10,28 +10,36 @@ logger = logging.getLogger(__name__)
 class BotException(Exception): pass
 class Bot(ABC):
     """
-    Bots communicate with all of the modules directly
-    This allows to think them all the way out without asking renderer to give them copy of all information
+TODO
     """
-    def __init__(self, name, game: Game):
-        """
-        Modificates game player instance to mark it as AI
-        """
-        player = game._get_player(name)
-        player.is_ai = True
-        self.opponent_field = {}
+    def __init__(self):
+        self.opponent_field: dict[tuple[int,int], CellStatus] = {}
+        self.last_shot = ((-1,-1), CellStatus.MISS)
 
 
-    def get_free_coords(self) -> list:
+    def get_free_coords(self) -> set[tuple[int, int]]:
         """
-        Returns list of (y,x) which are not void and not shot yet
+        Returns set of (y,x) which are not void and not shot yet
         """
-        return [coords for coords, state in self.opponent_field.items() if state == CellStatus.FREE]
-    
+        return {coords for coords, state in self.opponent_field.items() if state == CellStatus.FREE}
 
-    def get_neighbours(self, coords: tuple) -> list:
+
+    def get_neighbours(self, coords: tuple[int, int]) -> set[tuple[int, int]]:
         """
-        Returns list of closest (y,x) to given coords on opponent's field
+        Returns list of all (y,x) next to given coords vertically, horizontally and diagonally.
+        """
+        y, x = coords
+
+        neighbours = [(y + dy, x + dx) for dy, dx in [
+                        (1,-1),  (-1,0), (1,1),
+                        (0,-1),          (0,1),
+                        (-1,-1),  (1,0), (-1,1)]]
+
+        return {coord for coord in neighbours if coord in self.opponent_field}
+
+    def get_cross_neighbours(self, coords: tuple[int, int]) -> set[tuple[int, int]]:
+        """
+        Returns list of closest (y,x) vertically and horizontally.
         """
         y, x = coords
         # forms list of 4 potential coordinates next to given coords
@@ -40,10 +48,25 @@ class Bot(ABC):
                         (0,-1),          (0,1),
                                  (1,0)]]
         # picks from cross coordinates which are in actual field
-        return [coord for coord in cross_neighbours if coord in self.opponent_field]
+        return {coord for coord in cross_neighbours if coord in self.opponent_field}
+
+
+    def validate_destruction(self, destroyed_cells: list[tuple[int, int]]) -> None:
+        """
+        Gets list of destroyed cells and mark closest coords to them on the field as hit.
+        To be unavailable to picked from by bot.
+        """
+        for coords in destroyed_cells:
+            for neighbour in list(self.get_neighbours(coords)):
+                self.opponent_field[neighbour] = CellStatus.HIT
+    
+    def shot_result(self, coords: tuple[int, int], shot_result: CellStatus):
+        self.opponent_field[coords] = shot_result
+        self.last_shot = (coords, shot_result)
+        
 
     @abstractmethod
-    def shoot(self, field: dict) -> tuple:
+    def shoot(self) -> tuple[int, int]:
         """
         Expects {(y,x): "status"}
         Returns (y,x) coords where bot wants to shoot
@@ -54,15 +77,12 @@ class Randomer(Bot):
     """
     Simpliest AI. Shoots absolutely randomly
     """
-    def __init__(self, name, game):
-        super().__init__(name, game)
-        logger.info(f"{name} is now Randomer Bot")
+    def __init__(self):
+        super().__init__()
 
     def shoot(self) -> tuple[int, int]:
         shot_available = self.get_free_coords()
-        shot = random.choice(shot_available)
-        logger.debug(f"RandomerBot chose to shoot {shot} from {len(shot_available)} free cells")
-        return shot
+        return random.choice(list(shot_available))
 
 
 class Hunter(Bot):
@@ -71,36 +91,25 @@ class Hunter(Bot):
     Then starts to shoot all the neighbour cells unless full ship destruction
     When destroyed - shoots randomly again
     """
-    def __init__(self, name, game):
-        super().__init__(name, game)
-        self.hunt = [] # [(y,x)...]
-        self.last_shot = None # (y,x)
-        logger.info(f"{name} is now Hunter Bot")
+    def __init__(self):
+        super().__init__()
+        self.hunt: set[tuple[int, int]] = set()
+
         
 
-    def hunt_validation(self) -> list[tuple[int, int]]:
+    def hunt_validation(self) -> None:
         """
         Validates coordinates from hunting set to be shootable 
         """
-        if not self.hunt: return self.hunt
-        
-        validated = []
-        for coords in list(self.hunt):
-            if self.opponent_field[coords] == CellStatus.FREE:
-                validated.append(coords)
-        self.hunt = validated
-        return self.hunt
+        self.hunt &= self.get_free_coords()
 
 
     def shoot(self) -> tuple[int, int]:
-        if self.last_shot is not None and self.opponent_field[self.last_shot] == CellStatus.HIT:
-            self.hunt.extend([coords for coords in self.get_neighbours(self.last_shot) if coords not in self.hunt])
-            logger.debug(f"HunterBot is in hunt mode. Hunting for {self.hunt}")
+        
+        last_coords, last_result = self.last_shot
+        if last_result == CellStatus.HIT:
+            self.hunt.update(self.get_cross_neighbours(last_coords))
 
-        shot_available = self.hunt_validation()
-        if not shot_available:
-            shot_available = self.get_free_coords()
-            logger.debug(f"HunterBot is in random mode")
-        self.last_shot = random.choice(shot_available)
-        logger.debug(f"HunterBot chose to shoot {self.last_shot} from {len(shot_available)} free cells")
-        return self.last_shot
+        self.hunt_validation()
+        shot_available = self.hunt if self.hunt else self.get_free_coords()
+        return random.choice(list(shot_available))

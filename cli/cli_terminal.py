@@ -3,11 +3,14 @@ from functools import partial
 from blessed import Terminal
 from modules.enums_and_events import CellStatus
 
+
 logger = logging.getLogger(__name__)
+
 
 class STerminal:
     """
-    Superclass with general fields all subclasses required
+    Basically - patch for blessed.Terminal.
+    Previously was base class for all CLIElements. Now only manages with coloring and custom print methods.
     """
 
     def __init__(self):
@@ -22,21 +25,54 @@ class STerminal:
             "yellow":   {"main": self.yellow2,      "side": self.yellow4},
             "white":    {"main": self.white,        "side": self.dimgray},
         } # colors from blessed.Terminal
+        
+        # same as print, but with manual control
         self.pr = partial(print, end='')
         self.fl = partial(print, end="", flush=True)
     
     def paint(self, obj, color: str, *, side = False) -> str:
-        if color not in self.colors: color = "white"
-        if obj is None: return ""
-        if not side: return f"{self.colors[color]['main']}{obj}{self.normal}"
-        else: return f"{self.colors[color]['side']}{obj}{self.normal}"
+        """
+        Method to color text. Returns same str object colored with supported STerminal.colors
+        """
+        if color not in self.colors:
+            color = "white"
+        if obj is None:
+            return ""
+        if not side:
+            return f"{self.colors[color]['main']}{obj}{self.normal}"
+        else:
+            return f"{self.colors[color]['side']}{obj}{self.normal}"
+    
+    
+    def draw_separator(self, y: int):
+        horizontal = self.move_yx(y, 0) + "─" * self.width
+        horizontal += self.move_yx(y, 8) + r"→ Battleship-S ←" # r"⚝ 𝗕𝗮𝘁𝘁𝗹𝗲𝘀𝗵𝗶𝗽-𝗦 ⚝"
+        return horizontal
 
+    def wipe_screen(self):
+        return self.move_yx(0, 0) + self.clear
+    
+    
     def __getattr__(self, name):
         return getattr(self.term, name)
 
 
 class CLIField:
-    def __init__(self, term: STerminal, cells_to_draw: list[tuple[int, int]], height: int, width: int):
+    """
+    Class for drawing field in CLI.
+    Contains local copy of field and can redraw it any time.
+    Stores information about:
+    - all non-void field cells;
+    - orbit cells;
+    - planets cells.
+    """
+    def __init__(
+            self,
+            term: STerminal,
+            cells_to_draw: list[tuple[int, int]],
+            height: int,
+            width: int
+    ):
         self.term = term
         self.height = height
         self.width = width
@@ -49,7 +85,7 @@ class CLIField:
 
     def mark_cells_as(self, cells, cell_status: CellStatus):
         """
-        Changes status of given cells in local self.cells storage.
+        Changes status of given cells in self.cells.
         It's supposed that events update information.
         """
         for coords in cells:
@@ -86,13 +122,13 @@ class CLIField:
                 symb = ""
                 coords = (y, x)
 
-                if coords not in self.cells:
+                if coords not in self.cells: # void cells
                     output += self.term.move_yx(y_now + y, x_now+3 + x*2) + " "
                     continue
-                else:
+                else: # free cells
                     symb = "."
                 
-                if coords in self.orbits:
+                if coords in self.orbits: # orbit cells as midlayer
                     symb = self.term.paint("•", color)
                 
                 match self.cells[coords]:
@@ -105,64 +141,46 @@ class CLIField:
                     case CellStatus.RELAY:   symb = self.term.paint("#", color)
                     case CellStatus.HIT:     symb = self.term.paint("X", color)
 
-                if coords in self.planets:
+                if coords in self.planets: # planet is highest layer
                     symb = self.term.paint("@", color, side=True)             
                 
                 output += self.term.move_yx(y_now + y, x_now+3 + x*2) + symb
         return output
 
 
-class CLIDrawer:
-    """
-    Draws everything
-    """
-
-    def __init__(self, term: STerminal):
-        self.term = term
-
-    def draw_separator(self, y: int, x: int):
-        horizontal = self.term.move_yx(y, x) + "─" * self.term.width
-        # title = self.term.move_yx(CLIField.FIELD_SIZE_Y, CLIField.FIELD_SIZE_X * 2 + 6) + r"→ Battleship-S ←" # r"⚝ 𝗕𝗮𝘁𝘁𝗹𝗲𝘀𝗵𝗶𝗽-𝗦 ⚝"
-        return horizontal  
-
-    def wipe_screen(self):
-        return self.term.move_yx(0, 0) + self.term.clear
-
-
 class CLITalker:
+    """
+    Console under fields. Shows results of user commands.
+    """
     def __init__(self, term: STerminal):
         self.term = term
-        self.y0 = 30 + 1
-        self.x0 = 0
-        self.history = ["", "", "", "", "", "", "", "", ""]
+        self.history = []
     
-    def talk(self, text = "", loud = False):
+    def talk(self, text = "", /, coords = (31,0), payload_size = 7, loud = False):
         """
         Always returns console update string, but it can be just not used when no need to
         """
+        y, x = coords
         if text:
-            text = str(text)
-            for i in range(1, len(self.history)):
-                self.history[i-1] = self.history[i]
-            self.history[-1] = text
-        
+            self.history.append(str(text))
+        payload_size if payload_size < len(self.history) else len(self.history)
+        output = self.term.move_yx(y, x) + "\n".join(self.history[-payload_size:])
         if loud and text:
-            self.history = ["" for _ in self.history]
-            self.history[-1] = text
-
-        output = self.term.move_yx(self.y0, self.x0) + "\n".join(self.history)
+            output = self.term.move_yx(y, x) + text
+        
         return output.strip()
+
     
-    def show_winner(self, name: str):
-        output = self.term.move_yx(self.y0, self.x0) + self.term.clear_eos
+    def show_winner(self, name: str, /, coords = (31, 30)):
+        y, x = coords
         lines = (
             "╔═══════════════╗",
             "║     Winner    ║",
-            "╠═══════════════╣",
-           f"║    {name:<9}  ║",
+            "║═══════════════║",
+           f"     {name}      ",
             "╚═══════════════╝"
         )
-        output += self.term.move_yx(self.y0, self.x0)
-        for line in lines:
-            output += line + "\n"
-        return output + "game is over - type `exit` or `restart`"
+        output = "" 
+        for n in range(len(lines)):
+            output += self.term.move_yx(y + n, x) + lines[n]
+        return output + "\ngame is over - type `exit` or `restart`"

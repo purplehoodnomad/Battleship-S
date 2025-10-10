@@ -1,5 +1,5 @@
 import logging
-from cli.cli_terminal import STerminal, CLIDrawer, CLIField, CLITalker
+from cli.cli_terminal import STerminal, CLIField, CLITalker
 from modules.game import Game
 from modules.bots import Randomer, Hunter
 from modules.enums_and_events import CellStatus, EntityType
@@ -11,7 +11,6 @@ class CLIRenderer:
         self.term = term
         self.game = Game()
         self.talker = CLITalker(term)
-        self.drawer = CLIDrawer(term)
         self.players: dict[str, dict]= {} # {name: {info: value}}
         self.bots = {} # {playername: BotType}
     
@@ -23,9 +22,10 @@ class CLIRenderer:
         Completely redraws whole CLI
         """
         screen = ""
-        screen += self.drawer.wipe_screen()
+        screen += self.term.wipe_screen()
 
-        try: names = self.game.get_player_names()
+        try:
+            names = self.game.get_player_names()
         except: pass
 
         winner = self.game.whos_winner() # used to show winscreen and decide whether or not showing enemy ships
@@ -40,11 +40,13 @@ class CLIRenderer:
                 y_end = max((y_end, player["height"]))
         y = y_end + 1
         x = 0
-        screen += self.drawer.draw_separator(y, x) # draws board lines and game title
-        screen += self.talker.talk() # prints all line history available
-
+        screen += self.term.draw_separator(y) # draws board lines and game title
+        y += 3
+    
         if winner is not None:
-            screen += self.talker.show_winner(winner)
+            screen += self.talker.show_winner(winner, coords=(y, 20))
+        else: 
+            screen += self.talker.talk(payload_size=self.term.height - (y + 1), coords=(y, x)) # prints all line history available
         
         self.term.fl(screen)
         

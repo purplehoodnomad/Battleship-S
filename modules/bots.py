@@ -57,7 +57,7 @@ TODO
         To be unavailable to picked from by bot.
         """
         for coords in destroyed_cells:
-            for neighbour in list(self.get_neighbours(coords)):
+            for neighbour in self.get_neighbours(coords):
                 self.opponent_field[neighbour] = CellStatus.HIT
     
     def shot_result(self, coords: tuple[int, int], shot_result: CellStatus):

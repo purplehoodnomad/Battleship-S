@@ -15,11 +15,12 @@ class CLIRenderer:
         self.bots = {} # {playername: BotType}
     
 
-    def update_screen(self) -> None:
+    def update_screen(self) -> tuple[int, int]:
         """
-        Uses strings got from cli_terminal methods
-        Collects them into one large string and prints it
-        Completely redraws whole CLI
+        Uses strings got from cli_terminal methods.
+        Collects them into one large string and prints it.
+        Completely redraws whole CLI.
+        Returns (y, x) coordinates for correct pointing arrow drawing.
         """
         screen = ""
         screen += self.term.wipe_screen()
@@ -40,15 +41,15 @@ class CLIRenderer:
                 y_end = max((y_end, player["height"]))
         y = y_end + 1
         x = 0
-        screen += self.term.draw_separator(y) # draws board lines and game title
-        y += 3
+        screen += self.term.draw_separator(y+1) # draws board lines and game title
     
         if winner is not None:
-            screen += self.talker.show_winner(winner, coords=(y, 20))
+            screen += self.talker.show_winner(winner, coords=(y + 2, 20))
         else: 
-            screen += self.talker.talk(payload_size=self.term.height - (y + 1), coords=(y, x)) # prints all line history available
+            screen += self.talker.talk(payload_size=self.term.height - (y + 3), coords=(y+3, x)) # prints all line history available
         
         self.term.fl(screen)
+        return (y, x)
         
 
     def set_player(self, name: str, color: str, ai = None):
@@ -123,7 +124,7 @@ class CLIRenderer:
             self.players[name].update(payload[name])
             self.players[name]["field"] = CLIField(self.term, player_data["real_cells"], player_data["height"], player_data["width"])
         
-        self.talker.talk(self.term.paint("Setup state is running. Use `place` to place your ships.", "orange"), loud = True)
+        self.talker.talk("\n" + self.term.paint("Setup state is running. Use `place` to place your ships.", "orange") + "\n")
     
     
     def place_entity(self, name: str, type_value: str, icoords: str, r: str):
@@ -166,7 +167,7 @@ class CLIRenderer:
             else:
                 self.players[name]["field"].mark_cells_as(event.cells_occupied, CellStatus.ENTITY)
 
-        self.talker.talk(f"<{name}>: {result}")
+        self.talker.talk(f"<{self.term.paint(name, self.players[name]['color'])}>: {result}")
 
 
     def convert_input(self, coords: str) -> tuple[int, int]:
@@ -214,15 +215,16 @@ class CLIRenderer:
                     self.players[name]["field"].mark_cells_as(cells_occupied, CellStatus.ENTITY)
 
         
-        self.talker.talk(self.term.paint("Game started. Use `sh` to shoot.", "blue"), loud = True)
+        self.talker.talk("\n" + self.term.paint("Game started. Use `sh` to shoot.", "blue") + "\n")
 
     
-    def shoot(self, shooter: str, coords: tuple[int, int] | str):
+    def shoot(self, coords: tuple[int, int] | str):
         """
         Can take both coord formats: (y,x) and "A1"
         """
         if isinstance(coords, str):
             coords = self.convert_input(coords)
+        shooter = self.game.whos_turn()
         
         events = self.game.shoot(shooter, coords)
         results = {}
@@ -233,16 +235,17 @@ class CLIRenderer:
                 results[event.target].append((coords, result))
                 self.players[event.target]["field"].planets = event.planets_anchors
         
-        self.talker.talk(f"{shooter} shot {self.invert_output(coords)}.")
 
-        output: dict[str, str] = {}
+        output = {}
         for name, shots in results.items():
-            parts: list[str] = []
+            parts = []
             for position, status in shots:
                 parts.append(f"{self.invert_output(position)}: {str(status).replace('CellStatus.', '')}")
-            output[name] = ";\n".join(parts) + (";" if parts else "")
+            output[name] = "".join(parts)
 
-        self.talker.talk(f" Results: {output}")
+        for name, line in output.items():
+            if line:
+                self.talker.talk(f"<{self.term.paint(name + "'s field", self.players[name]['color'])}>\tshot result: {self.term.paint(line, "yellow", side=True)}")
 
         return events
 
@@ -260,7 +263,7 @@ class CLIRenderer:
             bot.opponent_field = {coords: CellStatus.FREE for coords in self.players[target]["real_cells"]}
 
         bots_coords_choose = self.bots[name].shoot()
-        events = self.shoot(name, bots_coords_choose)
+        events = self.shoot(bots_coords_choose)
         for event in events:
             if event.target == target:
                 for coords, result in event.shot_results.items():

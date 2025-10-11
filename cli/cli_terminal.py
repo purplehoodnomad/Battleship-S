@@ -46,7 +46,7 @@ class STerminal:
     
     def draw_separator(self, y: int):
         horizontal = self.move_yx(y, 0) + "─" * self.width
-        horizontal += self.move_yx(y, 8) + r"→ Battleship-S ←" # r"⚝ 𝗕𝗮𝘁𝘁𝗹𝗲𝘀𝗵𝗶𝗽-𝗦 ⚝"
+        horizontal += self.move_yx(y, 8) + r"⚝ 𝗕𝗮𝘁𝘁𝗹𝗲𝘀𝗵𝗶𝗽-𝗦 ⚝"
         return horizontal
 
     def wipe_screen(self):
@@ -129,7 +129,7 @@ class CLIField:
                     symb = "."
                 
                 if coords in self.orbits: # orbit cells as midlayer
-                    symb = self.term.paint("•", color)
+                    symb = self.term.paint("-", color, side=True) #•
                 
                 match self.cells[coords]:
                     case CellStatus.MISS:
@@ -142,7 +142,7 @@ class CLIField:
                     case CellStatus.HIT:     symb = self.term.paint("X", color)
 
                 if coords in self.planets: # planet is highest layer
-                    symb = self.term.paint("@", color, side=True)             
+                    symb = self.term.paint("@", color, side=False)             
                 
                 output += self.term.move_yx(y_now + y, x_now+3 + x*2) + symb
         return output
@@ -155,18 +155,19 @@ class CLITalker:
     def __init__(self, term: STerminal):
         self.term = term
         self.history = []
+        self.y = 31
+        self.x = 0
     
-    def talk(self, text = "", /, coords = (31,0), payload_size = 7, loud = False):
+    def talk(self, text = "", /, coords = (), payload_size = 7):
         """
         Always returns console update string, but it can be just not used when no need to
         """
-        y, x = coords
+        if coords:
+            self.y, self.x = coords
         if text:
             self.history.append(str(text))
         payload_size if payload_size < len(self.history) else len(self.history)
-        output = self.term.move_yx(y, x) + "\n".join(self.history[-payload_size:])
-        if loud and text:
-            output = self.term.move_yx(y, x) + text
+        output = self.term.move_yx(self.y, self.x) + "\n".join(self.history[-payload_size:])
         
         return output.strip()
 

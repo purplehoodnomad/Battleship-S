@@ -2,7 +2,7 @@ import random
 from cli.cli_terminal import STerminal
 from cli.cli_renderer import CLIRenderer
 from modules.game import Game
-from modules.enums_and_events import GameException, FieldException
+from modules.enums_and_events import GameException, FieldException, EntityType
 
 
 class CLIIO:
@@ -35,14 +35,15 @@ class CLIIO:
 
             # makes bots trying to autoshoot when game's started
             if self.game_active:
-                for bot_name in self.r.bots.keys():
+                while self.r.game.whos_turn() in self.r.bots:
                     try:
-                        self.r.automove(bot_name)
+                        self.r.automove()
                     except GameException:
-                        pass
+                        break
                     except FieldException as e:
                         self.talker.talk(repr(e))
-                self.upd()
+                        break
+                    self.upd()
                 
 
             try:
@@ -67,7 +68,7 @@ class CLIIO:
                         self.commands[cmd]["command"](self, *args)
             
             except Exception as e:
-                self.talker.talk(f"Error: {e}")
+                self.talker.talk(f"Error: {repr(e)}")
 
 
     def helper(self, com = None):
@@ -92,10 +93,6 @@ Usage: {self.term.paint(info['usage'], "white", side=True)}
 Options:
  {self.term.paint("\n ".join(info["options"]), "white", side=True)}"""
         self.talker.talk("\n" + help_line)
-
-        
-
-        
         
     
     @classmethod
@@ -315,7 +312,7 @@ def apl(self, name):
 
 
 @CLIIO.command(
-    usage="apl <name>",
+    usage="start",
     description="Proceeds game state to active. Use it after all players `place` their entities",
     options=[]
 )
@@ -331,6 +328,129 @@ def start(self):
 )
 def shoot(self, coords):
     self.r.shoot(coords)
+
+
+@CLIIO.command(
+    usage="restart",
+    description="Restarts game",
+    options=[]
+)
+def restart(self):
+    self.__init__()
+
+
+@CLIIO.command(
+    usage="preset <preset_name> [<flag>] [<autoplay>]",
+    description="Starts game as player-hunter in with defaults",
+    options=[
+        "preset_name: classic|standart|random|planet_mayhem|relay_madness",
+        "flag, optional: any value - skips ship placement",
+        "autoplay, optional: any value -enables ai for player - autoplay mode"
+    ]
+)
+def preset(self, mode, flag = None, autoplay = None):
+    self.__init__()
+    
+    player_name, bot_name = "Player", "Bot"
+    bot_ai = "hunter"
+    player_ai = random.choice(("randomer", "hunter")) if autoplay is not None else ""
+    
+    options = {player_name: {}, bot_name: {}}
+    
+    colors = list(self.term.colors.keys())
+    random.shuffle(colors)
+    colors.remove("white")
+    options[player_name]["color"], options[bot_name]["color"] = colors[:2]
+
+    self.r.set_player(player_name, options[player_name]["color"], player_ai)
+    self.r.set_player(bot_name, options[bot_name]["color"], bot_ai)
+
+    match mode:
+        case "classic":
+            for name in options.keys():
+                options[name]["entities"] = {
+                    EntityType.CORVETTE: 4,
+                    EntityType.FRIGATE: 3,
+                    EntityType.DESTROYER: 2,
+                    EntityType.CRUISER: 1,
+                }
+                options[name]["shape"] = "1"
+                options[name]["params"] = ["10", "10"]
+        
+        case "standart":
+            for name in options.keys():
+                options[name]["entities"] = {
+                    EntityType.CORVETTE: 5,
+                    EntityType.FRIGATE: 4,
+                    EntityType.DESTROYER: 3,
+                    EntityType.CRUISER: 2,
+                    EntityType.RELAY: 7,
+                    EntityType.PLANET: 1,
+                }
+                options[name]["shape"] = "1"
+                options[name]["params"] = ["12", "12"]
+        
+        case "random":
+            for name in options.keys():
+                options[name]["entities"] = {
+                    EntityType.CORVETTE: random.randint(0, 10),
+                    EntityType.FRIGATE: random.randint(0, 8),
+                    EntityType.DESTROYER: random.randint(0, 5),
+                    EntityType.CRUISER: random.randint(0, 3),
+                    EntityType.RELAY: random.randint(0, 8),
+                    EntityType.PLANET: random.randint(0, 4),
+                }
+                options[name]["shape"] = str(random.choice((1, 2, 3, 4, 5, 6, 7)))
+                if options[name]["shape"] == "1":
+                    height = str(random.randint(10, 15))
+                    width = str(random.randint(10, 15))
+                else:
+                    height = str(random.randint(7, 10))
+                    width = str(random.randint(1, 360))
+                
+                options[name]["params"] = [height, width]
+
+        case "planet_mayhem":
+            for name in options.keys():
+                options[name]["entities"] = {
+                    EntityType.CORVETTE: 4,
+                    EntityType.FRIGATE: 0,
+                    EntityType.DESTROYER: 0,
+                    EntityType.CRUISER: 0,
+                    EntityType.RELAY: 0,
+                    EntityType.PLANET: 30,
+                }
+                options[name]["shape"] = "2"
+                options[name]["params"] = ["8", "0"]
+        
+        case "relay_madness":
+            for name in options.keys():
+                options[name]["entities"] = {
+                    EntityType.CORVETTE: 1,
+                    EntityType.FRIGATE: 0,
+                    EntityType.DESTROYER: 0,
+                    EntityType.CRUISER: 0,
+                    EntityType.RELAY: 40,
+                    EntityType.PLANET: 0,
+                }
+                options[name]["shape"] = "3"
+                options[name]["params"] = ["12", "145"]
+
+    
+    for name, config in options.items():
+        self.r.set_player_field(name, config["shape"], config["params"])
+        for etype, amount in config["entities"].items():
+            self.r.entity_amount(name, etype, amount)
+
+    self.r.proceed_to_setup()
+    self.r.autoplace(bot_name)
+    if flag is not None:
+        self.r.autoplace(player_name)
+        self.r.start()
+        self.game_active = True
+    
+
+    
 
 
 @CLIIO.command(
@@ -357,10 +477,15 @@ def q(self):
 
     # field creation for both players
     for name in [name1, name2]:
-        height = "10" # random.randint(9, 26)
-        width = "10" # random.randint(9, 26)
+        shape = str(random.randint(1, 7))
+        if shape == "1":
+            height = str(random.randint(9, 15))
+            width = str(random.randint(9, 15))
+        else:
+            height = str(random.randint(6, 8))
+            width = str(random.randint(1, 360))           
 
-        self.r.set_player_field(name, "1", [height, width])
+        self.r.set_player_field(name, shape, [height, width])
         for type, amount in self.r.game.default_entities.items():
             self.r.entity_amount(name, type, amount)
     

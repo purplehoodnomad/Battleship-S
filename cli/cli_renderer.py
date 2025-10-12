@@ -2,7 +2,7 @@ import logging
 from cli.cli_terminal import STerminal, CLIField, CLITalker
 from modules.game import Game
 from modules.bots import Randomer, Hunter
-from modules.enums_and_events import CellStatus, EntityType
+from modules.enums_and_events import CellStatus, EntityType, convert_input, invert_output
 
 logger = logging.getLogger(__name__)
 
@@ -25,23 +25,28 @@ class CLIRenderer:
         screen = ""
         screen += self.term.wipe_screen()
 
-        try:
-            names = self.game.get_player_names()
-        except: pass
 
         winner = self.game.whos_winner() # used to show winscreen and decide whether or not showing enemy ships
-        show_ships = winner is not None
 
         y, x = 0, 0
         y_end = y
         if self.players:
-            for player in self.players.values():
-                screen += player["field"].draw((y, x), player["color"])
+            for name, player in self.players.items():
+
+                unfog = name not in self.bots or winner is not None
+                screen += player["field"].draw((y, x), player["color"], unfog=unfog)
+                
                 x += player["width"] * 2 + 4
                 y_end = max((y_end, player["height"]))
+        
         y = y_end + 1
         x = 0
-        screen += self.term.draw_separator(y+1) # draws board lines and game title
+        try:
+            active_player = self.players[self.game.whos_turn()]
+            line = self.term.paint(active_player["name"], active_player["color"])
+        except:
+            line = "Battleship-S"
+        screen += self.term.draw_separator(y+1, f'<{line}>') # draws board lines and game title
     
         if winner is not None:
             screen += self.talker.show_winner(winner, coords=(y + 2, 20))
@@ -144,11 +149,11 @@ class CLIRenderer:
             case _:
                 etype = EntityType.UNIDENTIFIED
 
-        coords = self.convert_input(icoords)
+        coords = convert_input(icoords)
         event = self.game.place_entity(name, etype, coords, int(r))
         if etype == EntityType.PLANET:
-            self.players[name]["field"].orbits.append(event.orbit_cells)
-            self.players[name]["field"].planets.append(event.anchor)
+            self.players[name]["field"].orbits.extend(event.orbit_cells)
+            self.players[name]["field"].planets.extend(event.anchor)
         else:
             self.players[name]["field"].mark_cells_as(event.cells_occupied, CellStatus.ENTITY)
 
@@ -167,32 +172,7 @@ class CLIRenderer:
             else:
                 self.players[name]["field"].mark_cells_as(event.cells_occupied, CellStatus.ENTITY)
 
-        self.talker.talk(f"<{self.term.paint(name, self.players[name]['color'])}>: {result}")
-
-
-    def convert_input(self, coords: str) -> tuple[int, int]:
-        """
-        Converts human input to game expected parameters.
-        E.g. A10 to (9, 0); J2 to (3, 9)
-        """
-        Y_coord, X_coord = None, None
-        for i in range (26):
-            letter = chr(i + ord("A"))
-            if coords.upper()[0] == letter:
-                X_coord = ord(letter) - ord("A")
-                Y_coord = int(coords.replace(letter, "")) - 1
-                break
-        if X_coord is None: raise ValueError("Coordinates must be in 'CRR' format")
-        return (Y_coord, X_coord)
-    
-    def invert_output(self, coords: tuple[int, int]) -> str:
-        """
-        
-        """
-        y, x = coords
-        letter = chr(x + ord("A"))
-        num = str(y + 1)
-        return letter + num
+        self.talker.talk(f"<{self.term.paint(name, self.players[name]['color'])}>: {self.term.paint(result, 'white', side=True)}")
 
 
     def start(self):
@@ -223,24 +203,27 @@ class CLIRenderer:
         Can take both coord formats: (y,x) and "A1"
         """
         if isinstance(coords, str):
-            coords = self.convert_input(coords)
+            coords = convert_input(coords)
         shooter = self.game.whos_turn()
         
         events = self.game.shoot(shooter, coords)
         results = {}
         for event in events:
             results[event.target] = []
-            for coords, result in event.shot_results.items():
-                self.players[event.target]["field"].mark_cells_as([coords], result)
-                results[event.target].append((coords, result))
+            for yx, result in event.shot_results.items():
+                self.players[event.target]["field"].mark_cells_as([yx], result)
+                results[event.target].append((yx, result))
                 self.players[event.target]["field"].planets = event.planets_anchors
+            if event.destroyed_cells:
+                for yx in event.destroyed_cells:
+                    self.players[event.target]["field"].mark_cells_as([yx], CellStatus.DESTROYED)
         
 
         output = {}
         for name, shots in results.items():
             parts = []
             for position, status in shots:
-                parts.append(f"{self.invert_output(position)}: {str(status).replace('CellStatus.', '')}")
+                parts.append(f"{invert_output(position)}: {str(status).replace('CellStatus.', '')}")
             output[name] = "".join(parts)
 
         for name, line in output.items():
@@ -250,25 +233,34 @@ class CLIRenderer:
         return events
 
 
-    def automove(self, name: str):
-        if name not in self.bots:
-            return
+    def automove(self):
 
+        name = self.game.whos_turn()
         names = list(self.players.keys())
         names.remove(name)
         target = names[0]
 
-        bot = self.bots[name]
+        try:
+            bot = self.bots[name]
+        except KeyError:
+            return
+        
         if not bot.opponent_field:
             bot.opponent_field = {coords: CellStatus.FREE for coords in self.players[target]["real_cells"]}
 
         bots_coords_choose = self.bots[name].shoot()
-        events = self.shoot(bots_coords_choose)
-        for event in events:
-            if event.target == target:
-                for coords, result in event.shot_results.items():
-                    if result in (CellStatus.MISS, CellStatus.HIT):
-                        bot.shot_result(coords, result)
-                bot.validate_destruction(event.destroyed_cells)
-                break
+        shooter_event, target_event = self.shoot(bots_coords_choose)
+
+        result = target_event.shot_results[bots_coords_choose]
+        
+        bot.shot_result(bots_coords_choose, result)           
+        bot.validate_destruction(target_event.destroyed_cells)
+
+        try:
+            opponent_bot = self.bots[target]
+            for coords, result in shooter_event.shot_results.items():
+                opponent_bot.shot_result(coords, result)
+            opponent_bot.validate_destruction(shooter_event.destroyed_cells)
+        except KeyError:
+            pass
                     

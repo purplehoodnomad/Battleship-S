@@ -44,9 +44,10 @@ class STerminal:
             return f"{self.colors[color]['side']}{obj}{self.normal}"
     
     
-    def draw_separator(self, y: int):
+    def draw_separator(self, y: int, text = ""):
         horizontal = self.move_yx(y, 0) + "─" * self.width
-        horizontal += self.move_yx(y, 8) + r"⚝ 𝗕𝗮𝘁𝘁𝗹𝗲𝘀𝗵𝗶𝗽-𝗦 ⚝"
+        # horizontal += self.move_yx(y, 8) + r"⚝ 𝗕𝗮𝘁𝘁𝗹𝗲𝘀𝗵𝗶𝗽-𝗦 ⚝"
+        horizontal += self.move_yx(y, 4) + text
         return horizontal
 
     def wipe_screen(self):
@@ -96,7 +97,7 @@ class CLIField:
             self.cells[coords] = cell_status
 
 
-    def draw(self, lu: tuple[int, int], color: str):
+    def draw(self, lu: tuple[int, int], color: str, /, unfog = False):
         """
         Draws field from given lu coordinates of left upper corner.
         """
@@ -129,20 +130,26 @@ class CLIField:
                     symb = "."
                 
                 if coords in self.orbits: # orbit cells as midlayer
-                    symb = self.term.paint("-", color, side=True) #•
+                    symb = self.term.paint("-", color, side=True) if unfog else "."
                 
                 match self.cells[coords]:
                     case CellStatus.MISS:
-                        if coords in self.orbits:
-                            symb = self.term.paint("o", color, side=True)
-                        else:
-                            symb = self.term.paint("o", "white", side=True)
-                    case CellStatus.ENTITY:  symb = self.term.paint("■", color)
-                    case CellStatus.RELAY:   symb = self.term.paint("#", color)
-                    case CellStatus.HIT:     symb = self.term.paint("X", color)
+                        symb = self.term.paint("o", color, side=True) if coords in self.orbits and unfog else self.term.paint("o", "white", side=True)
+                    
+                    case CellStatus.ENTITY: 
+                        symb = self.term.paint("■", color) if unfog else "."
+                    
+                    case CellStatus.RELAY:  
+                        symb = self.term.paint("#", color) if unfog else "."
+                            
+                    case CellStatus.HIT:
+                        symb = self.term.paint("●", color)
+                    
+                    case CellStatus.DESTROYED:
+                        symb = self.term.paint("Х", color)
 
-                if coords in self.planets: # planet is highest layer
-                    symb = self.term.paint("@", color, side=False)             
+                if coords in self.planets and unfog: # planet is highest layer
+                    symb = self.term.paint("@", color, side=False)
                 
                 output += self.term.move_yx(y_now + y, x_now+3 + x*2) + symb
         return output

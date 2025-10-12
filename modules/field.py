@@ -1,6 +1,6 @@
 from __future__ import annotations
 import logging
-from modules.enums_and_events import CellStatus, EntityType, EntityStatus, circle_coords, sort_circle_coords, ngon_coords, EntityException, FieldException
+from modules.enums_and_events import CellStatus, EntityType, EntityStatus, FieldException, circle_coords, ngon_coords, convert_input, invert_output
 
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,8 @@ class Field:
     Every shape is a rectangle where void cells form given shape.
     Field - only source of truth
     """
-    def __init__(self, shape = None, params = None):
+    def __init__(self, shape = None, params = None, /, name = "Unknown"):
+        self.name = str(name)
         # field - is a dict of cells
         # where key is their (y, x) tuple
         self._cells = {}
@@ -301,7 +302,7 @@ class Field:
         """
         cell = self.get_cell(coords)
         if cell.is_void or cell.was_shot:
-            raise FieldException(f"{self}: {coords} is not valid target")
+            raise FieldException(f"{self}: {invert_output(coords)} is not valid target")
         
         cell.was_shot = True
         
@@ -328,7 +329,7 @@ class Field:
         return iter(self._cells.keys())
 
     def __repr__(self):
-        return f"Field({self.dimensions['height']}, {self.dimensions['width']})"
+        return f"{self.name}'s field"
 
 
 
@@ -339,7 +340,8 @@ class Cell:
     Every cell has link to entity it belongs to. Entity itself decides which of cell is what part.
     """
     def __init__(self, y: int, x: int, *, is_void = False):
-        if not(isinstance(y, int) and isinstance(x, int)): raise TypeError("Cell coordinates must be integers")
+        if not(isinstance(y, int) and isinstance(x, int)):
+            raise TypeError("Cell coordinates must be integers")
         self.y, self.x = y, x
         self.is_void = is_void
         self.was_shot = False

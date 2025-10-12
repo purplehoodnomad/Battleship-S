@@ -34,7 +34,7 @@ class CellStatus(Enum):
     MISS = 2
     ENTITY = 3
     HIT = 4
-    # DESTROYED = 5
+    DESTROYED = 5
     ORBIT = 6
     PLANET = 7
     RELAY = 8
@@ -92,6 +92,34 @@ class PlaceEvent(Event):
     orbit_center: tuple = None
 
 
+
+def convert_input(coords: str) -> tuple[int, int]:
+    """
+    Converts human input to game expected parameters.
+    E.g.: A10 →(9, 0); J2 →(3, 9)
+    """
+    Y_coord, X_coord = -1, -1
+    for i in range (26):
+        letter = chr(i + ord("A"))
+        if coords[0] == letter:
+            X_coord = ord(letter) - ord("A")
+            Y_coord = int(coords.replace(letter, "")) - 1
+            break
+    if X_coord == -1:
+        raise ValueError(f"{coords}: Coordinates must be in 'CRR' format")
+    return (Y_coord, X_coord)
+
+def invert_output(coords: tuple[int, int]) -> str:
+    """
+    Inverts game coordinates format to human one.
+    E.g.: (9, 0) →A10; (3, 9) →J2
+    """
+    if not isinstance(coords, tuple) or not isinstance(coords[0], int) or not isinstance(coords[1], int):
+        raise ValueError(f"{coords}: Must be tuple of two integers: (y, x)")
+    y, x = coords
+    letter = chr(x + ord("A"))
+    num = str(y + 1)
+    return letter + num
 
 
 def circle_coords(radius: int, center = (0, 0)) -> list:

@@ -25,7 +25,7 @@ class Player:
 
         self.entities = {} # actual set entities {Entity.eid: Entity}
 
-        self.field = Field()
+        self.field = Field(name=self.name)
         self.colorize(color)
 
         logger.info(f"{self} created")
@@ -46,7 +46,7 @@ class Player:
 
 
     def set_field(self, shape: str, params: list) -> None:
-        self.field = Field(shape, params)
+        self.field = Field(shape, params, name=self.name)
         logger.info(f"{self} {self.field} was set")
 
 
@@ -73,7 +73,7 @@ class Player:
             self.field.occupy_cells(entity, coords, rot)
 
         elif etype == EntityType.RELAY:
-            coords = params[0] 
+            coords = params[0]
             rot = params[1]
             entity = Relay()
             self.field.occupy_cells(entity, coords, rot)     
@@ -108,16 +108,21 @@ class Player:
             planet.position += value
             updated_cells[planet.anchor] = CellStatus.PLANET
 
-        for planet in planets:
-            for entity in self.entities.values():
-                if planet.eid == entity.eid:
+        for planet1 in planets:
+            for planet2 in planets:
+                if planet1.eid == planet2.eid:
                     continue
                 
-                if entity.type == EntityType.PLANET and entity.anchor == planet.anchor:
-                    updated_cells[planet.anchor] = CellStatus.HIT
-                    entity.status = EntityStatus.DESTROYED
-                    planet.status = EntityStatus.DESTROYED
-
+                if planet1.anchor == planet2.anchor and planet1.anchor:
+                    anchors = planet1.anchor
+                    if anchors == ():
+                        logger.critical(f"EMPTY ANCHORS")
+                    updated_cells[planet1.anchor[:]] = CellStatus.HIT
+                    planet1.status = EntityStatus.DESTROYED
+                    planet2.status = EntityStatus.DESTROYED
+                    if anchors == ():
+                        logger.critical(f"EMPTY ANCHORS")
+        logger.warning(f"UPDATED CELLS DICT: {updated_cells}")
         return updated_cells
 
     def __str__(self):

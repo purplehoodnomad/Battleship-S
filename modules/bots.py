@@ -2,7 +2,8 @@ from __future__ import annotations
 import random
 import logging
 from abc import ABC, abstractmethod
-from modules.enums_and_events import CellStatus
+from modules.enums_and_events import CellStatus, convert_input, invert_output
+
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,11 @@ TODO
         """
         for coords in destroyed_cells:
             for neighbour in self.get_neighbours(coords):
-                self.opponent_field[neighbour] = CellStatus.HIT
+                self.opponent_field[neighbour] = CellStatus.MISS
+                if hasattr(self, "hunt"):
+                    self.hunt -= set(neighbour)
+
+            
     
     def shot_result(self, coords: tuple[int, int], shot_result: CellStatus):
         self.opponent_field[coords] = shot_result
@@ -82,7 +87,10 @@ class Randomer(Bot):
 
     def shoot(self) -> tuple[int, int]:
         shot_available = self.get_free_coords()
-        return random.choice(list(shot_available))
+        try:
+            return random.choice(list(shot_available))
+        except IndexError:
+            pass
 
 
 class Hunter(Bot):
@@ -106,10 +114,14 @@ class Hunter(Bot):
 
     def shoot(self) -> tuple[int, int]:
         
+        logger.debug("hunting for cells: " + str(self.hunt))
         last_coords, last_result = self.last_shot
         if last_result == CellStatus.HIT:
             self.hunt.update(self.get_cross_neighbours(last_coords))
 
         self.hunt_validation()
         shot_available = self.hunt if self.hunt else self.get_free_coords()
-        return random.choice(list(shot_available))
+        try:
+            return random.choice(list(shot_available))
+        except IndexError:
+            pass

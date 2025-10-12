@@ -9,18 +9,17 @@ from modules.enums_and_events import *
 logger = logging.getLogger()
 
 
-
 class Game:
     """
     Manages players and their abilities. Interface for renderer structures - CLI or endpoints
     """
     default_entities = {
-        EntityType.CORVETTE: 5,
+        EntityType.CORVETTE: 4,
         EntityType.FRIGATE: 3,
         EntityType.DESTROYER: 2,
         EntityType.CRUISER: 1,
-        EntityType.RELAY: 3,
-        EntityType.PLANET: 2,
+        EntityType.RELAY: 4,
+        EntityType.PLANET: 1,
     }
 
 
@@ -193,7 +192,7 @@ class Game:
         for etype, amount in types.items():
             if etype in self.default_entities:
                 if not amount: amount = 0
-                elif int(amount) > 4: amount = 4
+                # elif int(amount) > 4: amount = 4
                 elif int(amount) < 0: amount = 0
                 else: amount = int(amount)
                 player.pending_entities[etype] = int(amount)
@@ -349,17 +348,20 @@ class Game:
         # moving planets
         for player in self._players.values():
             planet_movement_results = player.move_planets(1)
-            for coords, status in planet_movement_results.items():
+
+            for yx, status in planet_movement_results.items():
+                logger.critical(f"{shooter} tried to shoot {invert_output(coords)} and yx={yx}")
+                
                 if status == CellStatus.HIT:
                     if player == target:
-                        target_field_updates.update(planet_movement_results)
+                        target_field_updates.update({yx: status})
                     else:
-                        shooter_field_updates.update(planet_movement_results)
+                        shooter_field_updates.update({yx: status})
                 else:
                     if player == target:
-                        target_planets_positions.append(coords)
+                        target_planets_positions.append(yx)
                     else:
-                        shooter_planets_positions.append(coords)
+                        shooter_planets_positions.append(yx)
         
         if not self.winner or self.winner is None:
                 # checking if game ended
@@ -375,7 +377,7 @@ class Game:
                     self.state = GameState.OVER
                     self.winner = shooter.name  
         
-        target_event = self.add_event(
+        shooter_event = self.add_event(
             EventType.SHOT,
             shooter="Relay and Planets reaction",
             target=shooter.name,
@@ -384,7 +386,7 @@ class Game:
             planets_anchors=shooter_planets_positions,
             destroyed_cells=self.get_player_meta(shooter.name)["destroyed_cells"]
         )
-        shooter_event = self.add_event(
+        target_event = self.add_event(
             EventType.SHOT,
             shooter=shooter.name,
             target=target.name,
@@ -393,8 +395,6 @@ class Game:
             planets_anchors=target_planets_positions,
             destroyed_cells=self.get_player_meta(target.name)["destroyed_cells"]
         )
-        logger.info(self.get_player_meta(shooter.name)["destroyed_cells"])
-        logger.info(self.get_player_meta(target.name)["destroyed_cells"])
         return (shooter_event, target_event)
 
 

@@ -12,20 +12,24 @@ class Entity:
 
     _counter = 0 # used to implement entity ids
     def __init__(self):
+
+        # metadata
+        self.eid = Entity._counter
+        Entity._counter += 1
+
         # geometry and positioning
         self.anchor: tuple = None # (y, x)
         self.size = 1
         self.rotation: int = None # 0, 1, 2, 3
+        
         # reference attributes
         self.cells_occupied = [] # list of cell coords
         self.cells_damaged = set() # cells which have damage where 0 is anchor
 
         # state and identification
         self.type = EntityType.UNIDENTIFIED
-        self.status = EntityStatus.NOTPLACED
-        # metadata
-        self.eid = Entity._counter
-        Entity._counter += 1
+        self._status = EntityStatus.NOTPLACED
+
 
 
     def update_state(self, *, anchor_coords = None, occupied_cells = None, rotation = None, status = None) -> None:
@@ -37,7 +41,6 @@ class Entity:
         if occupied_cells is not None: self.cells_occupied = occupied_cells
         if rotation is not None: self.rotation = rotation
         if status is not None: self.status = status
-        logger.info(f"{self} state updated")
 
 
     def make_damage(self, coords: tuple) -> None:
@@ -47,7 +50,18 @@ class Entity:
 
         if self.size == len(self.cells_damaged): self.status = EntityStatus.DESTROYED
         else: self.status = EntityStatus.DAMAGED
-        logger.debug(f"{self} state changed")
+
+
+    @property
+    def status(self):
+        return self._status
+    
+    @status.setter
+    def status(self, value: EntityStatus):
+        if not isinstance(value, EntityStatus):
+            raise EntityException(f"Tried to set status of {self} to {value} which is not EntityStatus")
+        logger.debug(f"{self} state changed: {self.status} → {value}")
+        self._status = value
 
 
     @staticmethod

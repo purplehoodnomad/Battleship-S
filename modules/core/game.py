@@ -1,9 +1,14 @@
 from __future__ import annotations
 import logging
+
 import uuid
-from modules.player import Player
-from modules.entities import Entity
-from modules.enums_and_events import *
+
+from modules.core.player import Player
+
+from modules.common.events import LobbyEvent, PlaceEvent, ShotEvent
+from modules.common.exceptions import GameException, FieldException
+from modules.common.enums import GameState, EntityType, EntityStatus, CellStatus, EventType, LobbyEventType
+from modules.common.utils import invert_output
 
 
 logger = logging.getLogger()
@@ -521,7 +526,8 @@ class Game:
         try:
             self.check_state(GameState.OVER)
             return self.winner
-        except GameException: return
+        except GameException:
+            return
 
     def check_state(self, state: GameState) -> None:
         """

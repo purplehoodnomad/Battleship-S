@@ -1,11 +1,13 @@
 import logging
-from modules.field import Field
-from modules.entities import Entity, Ship, Planet, Relay
-from modules.enums_and_events import CellStatus, EntityType, EntityStatus, PlayerException, EntityException, FieldException
+
+from modules.core.field import Field
+from modules.core.entities import Entity, Ship, Planet, Relay
+
+from modules.common.enums import CellStatus, EntityType, EntityStatus
+from modules.common.exceptions import PlayerException
 
 
 logger = logging.getLogger(__name__)
-
 
 
 class Player:

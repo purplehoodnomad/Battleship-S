@@ -1,6 +1,9 @@
 from __future__ import annotations
 import logging
-from modules.enums_and_events import CellStatus, EntityType, EntityStatus, FieldException, circle_coords, ngon_coords, convert_input, invert_output
+
+from modules.common.enums import CellStatus, EntityType, EntityStatus
+from modules.common.exceptions import FieldException
+from modules.common.utils import circle_coords, ngon_coords, invert_output
 
 
 logger = logging.getLogger(__name__)
@@ -26,7 +29,6 @@ class Field:
     def useful_cells_coords(self) -> list[tuple[int, int]]:
         """
         Returns list of all non-void cells.
-        Optimizes data transfering by removing useless information.
         """
         return [coords for coords, cell in self._cells.items() if not cell.is_void]
 

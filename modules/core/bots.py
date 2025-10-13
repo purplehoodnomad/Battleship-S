@@ -1,14 +1,17 @@
 from __future__ import annotations
 import random
 import logging
+
 from abc import ABC, abstractmethod
-from modules.enums_and_events import CellStatus, convert_input, invert_output
+
+from modules.common.exceptions import BotException
+from modules.common.enums import CellStatus
+from modules.common.utils import convert_input, invert_output
 
 
 logger = logging.getLogger(__name__)
 
 
-class BotException(Exception): pass
 class Bot(ABC):
     """
 TODO

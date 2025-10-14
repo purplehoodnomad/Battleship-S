@@ -107,8 +107,8 @@ class Entity:
     
 
     def __str__(self):
-        type_name = str(self.type).replace('Type.', '').capitalize()
-        return f"{type_name}-{self.eid}, occupies cells: {[(invert_output(coords), coords) for coords in self.cells_occupied]}"
+        type_name = str(self.type).replace('EntityType.', '').capitalize()
+        return f"{type_name}-{self.eid}, occupies cells: {([(invert_output(coords)) for coords in self.cells_occupied], [coords for coords in self.cells_occupied])}"
 
 
 
@@ -128,8 +128,6 @@ class Ship(Entity):
             raise EntityException(f"Ship must have ship type value or same int value, not {etype}")
         self.size = etype.value
         self.type = etype
-        
-        logger.info(f"Created: {self}")
 
 
     @property

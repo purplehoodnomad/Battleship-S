@@ -145,7 +145,7 @@ class Player:
 
 
     def __str__(self):
-        return f"{self.color.capitalize()}-{self.name}"
+        return f"{self.name}"
     
     def __repr__(self):
         return f"Player: name={self.name}, color={self.color}, field={self.field}, pending={self.pending_entities}, entities={self.entities}"

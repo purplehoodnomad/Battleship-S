@@ -300,7 +300,6 @@ class Field:
         
         for cell in available_cells:
             cell.occupied_by = entity
-            logger.debug(f"{self}: {cell} now occupied by {entity}")
         
         # entity has only right to update it's inner links for convenience
         entity.update_state(anchor_coords = anchor_coords, cells_occupied = reserved_coords, rotation = rotation, status = EntityStatus.FULLHEALTH)

@@ -5,6 +5,7 @@ from modules.core.entities import Entity, Ship, Planet, Relay
 
 from modules.common.enums import CellStatus, EntityType, EntityStatus
 from modules.common.exceptions import PlayerException
+from modules.common.utils import invert_output
 
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,8 @@ class Player:
     """
     def __init__(self, name = None, color = "white"):
 
-        if not name or name is None: raise PlayerException("Give me a name!")
+        if not name or name is None:
+            raise PlayerException("Give me a name!")
         else: self.name = str(name)
 
         # list of entities which are must be set before game starts
@@ -25,31 +27,40 @@ class Player:
             self.pending_entities[model] = 0
         del self.pending_entities[EntityType.UNIDENTIFIED]
 
-        self.entities = {} # actual set entities {Entity.eid: Entity}
+        self.entities: dict[int, Entity] = {} # actual set entities {Entity.eid: Entity}
 
         self.field = Field(name=self.name)
         self.colorize(color)
 
-        logger.info(f"{self} created")
+        logger.info(f"Created {self}")
     
 
     def colorize(self, color = "white") -> None:
         if color in ("blue", "green", "orange", "pink", "purple", "red", "yellow", "white"):
             self.color = color
-            logger.info(f"{self} changed color to {self.color}.")
+            logger.info(f"Changed color to {self.color} for {self}")
         else:
             self.color = "white"
-            logger.info(f"{self} tried to be {color}. Changed it to {self.color} instead")
+            logger.info(f"{self} tried to be unsupported {color}. Changed it to {self.color} instead")
 
 
     def get_entity(self, eid: int) -> Entity:
-        try: return self.entities[eid]
-        except KeyError: raise PlayerException(f"{self} has no entity with eid={eid}")
+        """
+        Returns entity instance by given entity id.
+        """
+        try:
+            return self.entities[eid]
+        except KeyError:
+            raise PlayerException(f"{self} has no entity with eid={eid}")
 
 
     def set_field(self, shape: str, params: list) -> None:
+        """
+        Sets field by parsing parameters to field method.
+        """
         self.field = Field(shape, params, name=self.name)
-        logger.info(f"{self} {self.field} was set")
+        
+        logger.info(f"Field {self.field} set for {self}")
 
 
     def place_entity(self, etype: EntityType, params: list) -> dict:
@@ -61,24 +72,23 @@ class Player:
         If placed - returns entity metadata dict.
         """
 
-        if self.pending_entities[etype] <= 0: raise PlayerException(f"{self} has no {etype} available to place")
+        if self.pending_entities[etype] <= 0:
+            raise PlayerException(f"{self} has no {etype} available to place")
         
         if etype in (
             EntityType.CORVETTE,
             EntityType.FRIGATE,
             EntityType.DESTROYER,
             EntityType.CRUISER,
+            EntityType.RELAY
         ):
             coords = params[0] 
             rot = params[1]
-            entity = Ship(etype.value)
-            self.field.occupy_cells(entity, coords, rot)
-
-        elif etype == EntityType.RELAY:
-            coords = params[0]
-            rot = params[1]
-            entity = Relay()
-            self.field.occupy_cells(entity, coords, rot)     
+            if etype == EntityType.RELAY:
+                entity = Relay()
+            else:
+                entity = Ship(etype)
+            self.field.occupy_cells(entity, coords, rot)   
 
         elif etype == EntityType.PLANET:
             coords = params[0]
@@ -86,15 +96,22 @@ class Player:
             entity = Planet(orbit_radius, coords)
             self.field.setup_a_planet(entity)
         else:
-            raise PlayerException("Other entities which are not ships are not implemented yet")
+            raise PlayerException(f"{etype} is not implemented")
         
         self.pending_entities[etype] -= 1
         self.entities[entity.eid] = entity
+        
+        logger.info(f"{self} placed: {entity}")
+
         return entity.metadata
 
 
     def take_shot(self, coords: tuple[int, int]) -> CellStatus:
+        """
+        Parses shot parameters to Field method.
+        """
         return self.field.take_shot(coords)
+
 
     def move_planets(self, value = 1) -> dict[tuple[int, int], CellStatus]:
         """
@@ -103,88 +120,32 @@ class Player:
         Manages with planet collision either.
         """
         
-        updated_cells = {}
+        # gets all planets on the field which are not destroyed yet
         planets = [planet for planet in self.entities.values() if planet.type == EntityType.PLANET and planet.status != EntityStatus.DESTROYED]
         
+        updated_cells = {}
         for planet in planets:
-            planet.position += value
+            planet.position += value # moves planet forward on their orbits, usually with default step 1
             updated_cells[planet.anchor] = CellStatus.PLANET
 
+        # takes all pairs of planets and checks if they're collided
         for planet1 in planets:
             for planet2 in planets:
+                # it's basically same object - skips
                 if planet1.eid == planet2.eid:
                     continue
                 
                 if planet1.anchor == planet2.anchor and planet1.anchor:
-                    anchors = planet1.anchor
-                    if anchors == ():
-                        logger.critical(f"EMPTY ANCHORS")
-                    updated_cells[planet1.anchor[:]] = CellStatus.HIT
+                    logger.info(f"{self} Planets collided on cell {invert_output(planet1.anchor)}{planet1.anchor}: {planet1} with {planet2}")
+                    updated_cells[planet1.anchor[:]] = CellStatus.HIT # rewrites information on this cell as hit event
                     planet1.status = EntityStatus.DESTROYED
                     planet2.status = EntityStatus.DESTROYED
-                    if anchors == ():
-                        logger.critical(f"EMPTY ANCHORS")
-        logger.warning(f"UPDATED CELLS DICT: {updated_cells}")
+
         return updated_cells
 
+
     def __str__(self):
-        return f"Player {self.name}"
+        return f"{self.color.capitalize()}-{self.name}"
     
     def __repr__(self):
         return f"Player: name={self.name}, color={self.color}, field={self.field}, pending={self.pending_entities}, entities={self.entities}"
-    
-
-
-    # NOT USED. REFACTOR OR DELETE LATER
-    # def get_field(self, *, private = False) -> dict:
-    #     """
-    #     Returns field state in readable format {(y,x): "state"}
-    #     """
-    #     if self.field is None: raise PlayerException(f"{self} has no field")
-
-    #     public_field = {}
-    #     for coords in self.field:
-    #         cell = self.field.get_cell(coords)
-            
-    #         match (cell.is_void, cell.occupied_by, cell.was_shot):
-    #             case (True, _, _):
-    #                 symb = CellStatus.VOID
-    #             case (_, occupied_by, True):
-    #                 if occupied_by is None:
-    #                     symb = CellStatus.MISS
-    #                 else:
-    #                     symb = CellStatus.HIT
-    #             case (_, occupied_by, False):
-    #                 if private and occupied_by is not None:
-    #                     if occupied_by.type == EntityType.PLANET:
-    #                         if coords == occupied_by.anchor:
-    #                             symb = CellStatus.PLANET
-    #                         else:
-    #                             symb = CellStatus.ORBIT
-    #                     elif occupied_by.type == EntityType.RELAY:
-    #                         symb = CellStatus.RELAY
-    #                     else:
-    #                         symb = CellStatus.ENTITY
-    #                 else:
-    #                     symb = CellStatus.FREE
-    #         public_field[coords] = symb
-    #     return public_field
-
-
-    # NOT USED. REFACTOR OR DELETE LATER
-    # def normalize_eids(self) -> dict:
-    #     """
-    #     Placing ships wrong creates a lot of gc instances
-    #     This method brings eid back to numeration from 0
-    #     """
-    #     counter = 0
-    #     normilized_entities = {}
-    #     for entity in self.entities.values():
-    #         entity.eid = counter
-    #         normilized_entities[counter] = entity
-    #         counter += 1
-    #         logger.info(f"Normalization: {entity}")
-        
-    #     self.entities = normilized_entities
-    #     Entity._counter = counter + 1
-    #     return self.entities

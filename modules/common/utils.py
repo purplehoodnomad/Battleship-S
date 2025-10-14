@@ -24,6 +24,9 @@ def invert_output(coords: tuple[int, int]) -> str:
     Inverts game coordinates format to human one.
     E.g.: (9, 0) →A10; (3, 9) →J2.
     """
+    if not coords:
+        return coords
+
     if not isinstance(coords, tuple) or not isinstance(coords[0], int) or not isinstance(coords[1], int):
         raise ValueError(f"{coords}: Must be tuple of two integers: (y, x)")
     

@@ -1,9 +1,9 @@
-from __future__ import annotations
 import logging
+from random import choice, randint
 
 from modules.common.enums import EntityType, EntityStatus
 from modules.common.exceptions import EntityException
-from modules.common.utils import circle_coords, sort_circle_coords
+from modules.common.utils import circle_coords, sort_circle_coords, invert_output
 
 
 logger = logging.getLogger(__name__)
@@ -19,9 +19,9 @@ class Entity:
         Entity._counter += 1
 
         # geometry and positioning
-        self.anchor: tuple = None # (y, x)
+        self.anchor: tuple = None # (y, x) # type: ignore
         self.size = 1
-        self.rotation: int = None # 0, 1, 2, 3
+        self.rotation: int = None # 0, 1, 2, 3 # type: ignore
         
         # reference attributes
         self.cells_occupied = [] # list of cell coords
@@ -33,24 +33,34 @@ class Entity:
 
 
 
-    def update_state(self, *, anchor_coords = None, occupied_cells = None, rotation = None, status = None) -> None:
+    def update_state(
+        self,
+        *,
+        anchor_coords: tuple[int, int] = None, # type: ignore
+        cells_occupied: list[tuple[int, int]] = None, # type: ignore
+        rotation: int = None, # type: ignore
+        status: EntityStatus = None # type: ignore
+    ) -> None:
         """
-        Syncronizes self state with data given by Field
-        Updates only given parameters
+        Syncronizes self state with data given by Field.
+        Updates only given parameters.
         """
         if anchor_coords is not None: self.anchor = anchor_coords
-        if occupied_cells is not None: self.cells_occupied = occupied_cells
+        if cells_occupied is not None: self.cells_occupied = cells_occupied
         if rotation is not None: self.rotation = rotation
         if status is not None: self.status = status
 
 
     def make_damage(self, coords: tuple) -> None:
-        "Field desided that there's entity so cells_occupied MUST contain coords"
+        "Converts given coords to distance from anchor point and marks it as damaged."
         damaged_tile = self.cells_occupied.index(coords)
+        
         self.cells_damaged.add(damaged_tile)
 
-        if self.size == len(self.cells_damaged): self.status = EntityStatus.DESTROYED
-        else: self.status = EntityStatus.DAMAGED
+        if self.size == len(self.cells_damaged):
+            self.status = EntityStatus.DESTROYED
+        else:
+            self.status = EntityStatus.DAMAGED
 
 
     @property
@@ -61,15 +71,17 @@ class Entity:
     def status(self, value: EntityStatus):
         if not isinstance(value, EntityStatus):
             raise EntityException(f"Tried to set status of {self} to {value} which is not EntityStatus")
+        
         logger.debug(f"{self} state changed: {self.status} → {value}")
         self._status = value
 
 
     @staticmethod
-    def rotation_manage(rotation) -> tuple:
+    def rotation_manage(rotation) -> tuple[tuple[int, int], int]:
         """
-        Rotation is counterclockwise because (0,0) is a left upper corner of the field - inverted square coords
-        Computing same with sin/cos would result same values, but this one more stable
+        Rotation is counterclockwise because (0,0) is a left upper corner of the field - inverted square coords.
+        Computing same with sin/cos would result same values, but this one more stable for tile-based field.
+        Returns tuple of ((dy, dx), normalized rotation value).
         """
         rotation = (rotation + 4) % 4
         dydx = [
@@ -79,35 +91,55 @@ class Entity:
             (-1,0)  # up
         ]
         return (dydx[rotation], rotation)
+    
+
+    def reserve_coords(self, anchor_coords: tuple, rotation: int) -> tuple[list[tuple[int, int]], int]:
+        """
+        Returns tuple: list of cells entity would take with giiven anchor coords and rotation;
+        and normalized rotation.
+        """
+        y0, x0 = anchor_coords
+        
+        dydx, rotation = Entity.rotation_manage(rotation)
+        reserved_coords = [((y0 + i*dydx[0]), (x0 + i*dydx[1])) for i in range(self.size)]
+        
+        return (reserved_coords, rotation)
+    
 
     def __str__(self):
         type_name = str(self.type).replace('Type.', '').capitalize()
-        return f"{type_name}-{self.eid}"
+        return f"{type_name}-{self.eid}, occupies cells: {[(invert_output(coords), coords) for coords in self.cells_occupied]}"
 
 
 
 class Ship(Entity):
     """
-    Main entity in the game
-    Can be placed next to the wfield border
-    Can't be placed next to other ships
+    Main entity in the game.
+    Can be placed next to the field border and planet orbits.
+    Can't be placed next to other ships or relays.
     """
-    def __init__(self, size: int):
+    def __init__(self, value: int|EntityType):
+        """
+        Creates ship entity with given size or ship type.
+        """
         super().__init__()
-        self.size = size
-        self.type = EntityType(size)
-        logger.info(f"{self} created")
+        
+        self.size = value
+        if isinstance(value, int) and value <= EntityType.CRUISER.value:
+            self.type = EntityType(value)
+        elif isinstance(value, EntityType) and value <= EntityType.CRUISER:
+            self.type = value
+        else:
+            raise EntityException(f"Ship must have ship type value or same int value, not {value}")
+        
+        logger.info(f"Created: {self}")
 
-    def reserve_coords(self, anchor_coords: tuple, rotation: int) -> dict[str, tuple[int, int]|str]:
-
-        dydx, rotation = Entity.rotation_manage(rotation)
-        y0, x0 = anchor_coords
-        # note that returns calculated list of coords AND angle!
-        # dcit was chosen with goal not to struggle with which index is what
-        return {"coords": [((y0 + i*dydx[0]), (x0 + i*dydx[1])) for i in range(self.size)], "rotation": rotation}
 
     @property
     def metadata(self) -> dict:
+        """
+        Returns ship's metadata as dict.
+        """
         return {
             "eid": self.eid,
             "etype": self.type,
@@ -119,34 +151,46 @@ class Ship(Entity):
             "cells_damaged": self.cells_damaged,
         }
 
+
     def __repr__(self):
-        return f"eid={self.eid} {self.type} {self.status}, a={self.anchor} r={self.rotation}"
+        return f"eid={self.eid} {self.type} {self.status}, a={self.anchor} r={self.rotation}, occupied={({coords for coords in self.cells_occupied}, {invert_output(coords) for coords in self.cells_occupied})}"
 
 
 class Planet(Entity):
-    def __init__(self, radius: int, center: tuple, rotation: int = None):
+    """
+    Decoy object. Rotates over it's orbit on every turn.
+    Can cross field partially - that's why position of planet (it's anchor) stored in entity instance and not in field's.
+    Field only knows which cells are belong to planet's orbit.
+    """
+    def __init__(self, radius: int, center: tuple, rotation: int = None): # type: ignore
         super().__init__()
+        
         self.orbit_radius = radius
         self.orbit_center = () # (y, x) of center
         self.orbit_cells = [] # all orbit cells (even those not present on field)
         self.anchor = () # coords of current planet position on orbit
-        self.position = 0
-        self.cells_occupied = [] # basically orbit cell list which are part of field
+        
+        self.position = 0 # is used for iterating in orbit_cells lists
+        self.cells_occupied = [] # all coords pairs which are part of the field
         self.type = EntityType.PLANET
+        
         if rotation is None:
-            from random import choice
             self.rotation = choice([1, -1]) # 1=clockwise; -1=counterclockwise
         # what's fun - sign of rotation defines direction and value defines speed
         else: self.rotation = rotation
 
         self.set_orbit(radius, center)
-    
+
+
     @property
     def position(self) -> int:
         return self._position
 
     @position.setter
     def position(self, value: int):
+        """
+        Value is either starting position of planet on it's orbit or step how far it should move from it's current position.
+        """
         length = len(self.orbit_cells)
         if length == 0:
             return
@@ -168,33 +212,41 @@ class Planet(Entity):
     
     @status.setter # removes anchor point upon destruction
     def status(self, value: EntityStatus):
+        
         if not isinstance(value, EntityStatus):
             raise EntityException(f"{value} is not EntityStatus")
+        
         if value == EntityStatus.DESTROYED:
             self.anchor = ()
             self._status = value
+            logger.info(f"Planet was destroyed: {self}")
         else:
             self._status = value
 
 
     def set_orbit(self, radius: int, center: tuple[int, int]) -> None:
         """
-        Generates orbit cells and saves them in planet instance.
+        Generates orbit cells and saves them in the planet instance.
         """
         if radius == 0:
             self.orbit_center = center
             self.orbit_cells = [center]
             return
+        
         orbit = circle_coords(radius, center)
         orbit = sort_circle_coords(center, orbit)
+        
         self.orbit_center = center
         self.orbit_cells = orbit
-        from random import randint
+
         self.position = randint(0, len(orbit) - 1)
 
 
     @property
     def metadata(self) -> dict:
+        """
+        Returns planet metadata as dict.
+        """
         return {
             "eid": self.eid,
             "etype": self.type,
@@ -207,22 +259,23 @@ class Planet(Entity):
             "orbit_center": self.orbit_center
         }
 
+    def reserve_coords(self, anchor_coords: tuple, rotation: int) -> tuple[list[tuple[int, int]], int]:
+        raise EntityException("reserve_coords() is not supported for planets")
+
 
     def __repr__(self):
-        return f"eid={self.eid} {self.type}, c={self.orbit_center} r={self.orbit_radius}"
+        return f"eid={self.eid} {self.type}, center={invert_output(self.orbit_center)}{self.orbit_center} radius={self.orbit_radius} anchor={invert_output(self.anchor)}{self.anchor}"
 
 
 
 class Relay(Entity):
+    """
+    1-tiled ships which returns shot on shooter's field.
+    """
     def __init__(self):
         super().__init__()
         self.type = EntityType.RELAY
-    
-    def reserve_coords(self, anchor_coords: tuple, rotation: int) -> dict[str, tuple[int, int]|str]:
 
-        dydx, rotation = Entity.rotation_manage(rotation)
-        y0, x0 = anchor_coords
-        return {"coords": [((y0 + i*dydx[0]), (x0 + i*dydx[1])) for i in range(self.size)], "rotation": rotation}
     
     @property
     def metadata(self) -> dict:

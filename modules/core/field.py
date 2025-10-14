@@ -303,7 +303,7 @@ class Field:
             logger.debug(f"{self}: {cell} now occupied by {entity}")
         
         # entity has only right to update it's inner links for convenience
-        entity.update_state(anchor_coords = anchor_coords, occupied_cells = reserved_coords, rotation = rotation, status = EntityStatus.FULLHEALTH)
+        entity.update_state(anchor_coords = anchor_coords, cells_occupied = reserved_coords, rotation = rotation, status = EntityStatus.FULLHEALTH)
 
 
     def neighbours(self, coord_list: Iterable[tuple[int, int]]) -> set[tuple[int, int]]:
@@ -349,7 +349,7 @@ class Field:
         for coords in orbit_cells:
             self.get_cell(coords).occupied_by = planet
         
-        planet.update_state(occupied_cells=list(orbit_cells), status=EntityStatus.DAMAGED) # damaged so first hit doesn't change it state
+        planet.update_state(cells_occupied=list(orbit_cells), status=EntityStatus.DAMAGED) # damaged so first hit doesn't change it state
 
     
     def take_shot(self, coords: tuple[int, int]) -> CellStatus:

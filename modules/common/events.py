@@ -1,5 +1,7 @@
 from dataclasses import dataclass
-from modules.common.enums import CellStatus, GameState, EventType, LobbyEventType
+from typing import Optional, Iterable
+
+from modules.common.enums import EntityType, CellStatus, GameState, EventType, LobbyEventType
 
 
 @dataclass
@@ -22,21 +24,21 @@ class ShotEvent(Event):
 
 @dataclass
 class LobbyEvent(Event):
-    player_1: str
-    player_2: str
-    turn_order: list
-    winner: str
     lobby_event: LobbyEventType
+    turn_order: list[str]
     payload: dict
+    player_1: Optional[str] = None
+    player_2: Optional[str] = None
+    winner: Optional[str] = None
 
 @dataclass
 class PlaceEvent(Event):
     player_name: str
     entity_id: int
-    entity_type: str
-    anchor: tuple
+    entity_type: EntityType
+    anchor: tuple[int, int]
     rotation: int
-    cells_occupied: list
-    radius: int
-    orbit_cells: list
-    orbit_center: tuple
+    cells_occupied: list[tuple[int, int]]
+    radius: Optional[int] = None
+    orbit_cells: Optional[list[tuple[int, int]]] = None
+    orbit_center: Optional[tuple[int, int]] = None

@@ -118,19 +118,16 @@ class Ship(Entity):
     Can be placed next to the field border and planet orbits.
     Can't be placed next to other ships or relays.
     """
-    def __init__(self, value: int|EntityType):
+    def __init__(self, etype: EntityType):
         """
-        Creates ship entity with given size or ship type.
+        Creates ship entity with given ship type.
         """
         super().__init__()
         
-        self.size = value
-        if isinstance(value, int) and value <= EntityType.CRUISER.value:
-            self.type = EntityType(value)
-        elif isinstance(value, EntityType) and value <= EntityType.CRUISER:
-            self.type = value
-        else:
-            raise EntityException(f"Ship must have ship type value or same int value, not {value}")
+        if not isinstance(etype, EntityType) or etype.value > EntityType.CRUISER.value:
+            raise EntityException(f"Ship must have ship type value or same int value, not {etype}")
+        self.size = etype.value
+        self.type = etype
         
         logger.info(f"Created: {self}")
 

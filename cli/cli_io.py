@@ -1,8 +1,12 @@
 import random
+
 from cli.cli_terminal import STerminal
 from cli.cli_renderer import CLIRenderer
-from modules.game import Game
-from modules.enums_and_events import GameException, FieldException, EntityType
+
+from modules.core.game import Game
+
+from modules.common.enums import EntityType
+from modules.common.exceptions import GameException, FieldException 
 
 
 class CLIIO:
@@ -15,11 +19,12 @@ class CLIIO:
         self.r = CLIRenderer(self.term)
         self.talker = self.r.talker
         self.game_active = False
+        self.show_all = False
         self.arrow_coords = (3, 0) # position of input crusor
     commands = {}
     
     def upd(self):
-        self.arrow_coords = self.r.update_screen()
+        self.arrow_coords = self.r.update_screen(self.show_all)
     
     @property
     def arrow(self):
@@ -354,6 +359,8 @@ def preset(self, mode, flag = None, autoplay = None):
     player_name, bot_name = "Player", "Bot"
     bot_ai = "hunter"
     player_ai = random.choice(("randomer", "hunter")) if autoplay is not None else ""
+    if autoplay is not None:
+        self.show_all = True
     
     options = {player_name: {}, bot_name: {}}
     
@@ -418,10 +425,10 @@ def preset(self, mode, flag = None, autoplay = None):
                     EntityType.DESTROYER: 0,
                     EntityType.CRUISER: 0,
                     EntityType.RELAY: 0,
-                    EntityType.PLANET: 30,
+                    EntityType.PLANET: 21,
                 }
                 options[name]["shape"] = "2"
-                options[name]["params"] = ["8", "0"]
+                options[name]["params"] = ["6", "0"]
         
         case "relay_madness":
             for name in options.keys():

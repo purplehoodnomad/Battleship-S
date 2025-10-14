@@ -1,7 +1,9 @@
 import logging
 from functools import partial
+
 from blessed import Terminal
-from modules.enums_and_events import CellStatus
+
+from modules.common.enums import CellStatus
 
 
 logger = logging.getLogger(__name__)

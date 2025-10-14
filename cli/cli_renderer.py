@@ -1,10 +1,16 @@
 import logging
+
 from cli.cli_terminal import STerminal, CLIField, CLITalker
-from modules.game import Game
-from modules.bots import Randomer, Hunter
-from modules.enums_and_events import CellStatus, EntityType, convert_input, invert_output
+
+from modules.core.game import Game
+from modules.core.bots import Randomer, Hunter
+
+from modules.common.enums import CellStatus, EntityType
+from modules.common.utils import convert_input, invert_output
+
 
 logger = logging.getLogger(__name__)
+
 
 class CLIRenderer:
     def __init__(self, term: STerminal):
@@ -15,7 +21,7 @@ class CLIRenderer:
         self.bots = {} # {playername: BotType}
     
 
-    def update_screen(self) -> tuple[int, int]:
+    def update_screen(self, show_all = False) -> tuple[int, int]:
         """
         Uses strings got from cli_terminal methods.
         Collects them into one large string and prints it.
@@ -34,6 +40,8 @@ class CLIRenderer:
             for name, player in self.players.items():
 
                 unfog = name not in self.bots or winner is not None
+                if show_all:
+                    unfog = show_all
                 screen += player["field"].draw((y, x), player["color"], unfog=unfog)
                 
                 x += player["width"] * 2 + 4

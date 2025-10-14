@@ -12,6 +12,3 @@ class PlayerException(Exception):
 
 class GameException(Exception):
     pass
-
-class BotException(Exception):
-    pass

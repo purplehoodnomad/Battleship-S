@@ -1,5 +1,6 @@
 import logging
 from random import choice, randint
+from typing import Optional
 
 from modules.common.enums import EntityType, EntityStatus
 from modules.common.exceptions import EntityException
@@ -15,7 +16,7 @@ class Entity:
     def __init__(self):
 
         # metadata
-        self.eid = Entity._counter
+        self.eid = Entity._counter # counter is used as identifier. It's simpliest way to implement unique id when there're no async
         Entity._counter += 1
 
         # geometry and positioning
@@ -51,8 +52,11 @@ class Entity:
         if status is not None: self.status = status
 
 
-    def make_damage(self, coords: tuple) -> None:
+    def make_damage(self, coords: tuple[int, int]) -> None:
         "Converts given coords to distance from anchor point and marks it as damaged."
+        if coords not in self.cells_occupied:
+            raise EntityException(f"Tried to damage {coords} which are not cells occupied by {self}")
+        
         damaged_tile = self.cells_occupied.index(coords)
         
         self.cells_damaged.add(damaged_tile)
@@ -72,8 +76,10 @@ class Entity:
         if not isinstance(value, EntityStatus):
             raise EntityException(f"Tried to set status of {self} to {value} which is not EntityStatus")
         
-        logger.debug(f"{self} state changed: {self.status} → {value}")
+        old = self._status
         self._status = value
+        
+        logger.debug(f"{self} state changed: {old} → {self.status}")
 
 
     @staticmethod
@@ -108,7 +114,7 @@ class Entity:
 
     def __str__(self):
         type_name = str(self.type).replace('EntityType.', '').capitalize()
-        return f"{type_name}-{self.eid}, occupies cells: {([(invert_output(coords)) for coords in self.cells_occupied], [coords for coords in self.cells_occupied])}"
+        return f"{type_name}-{self.eid}, occupies cells: {[(invert_output(coords)) for coords in self.cells_occupied]}"
 
 
 
@@ -148,7 +154,7 @@ class Ship(Entity):
 
 
     def __repr__(self):
-        return f"eid={self.eid} {self.type} {self.status}, a={self.anchor} r={self.rotation}, occupied={({coords for coords in self.cells_occupied}, {invert_output(coords) for coords in self.cells_occupied})}"
+        return f"eid={self.eid} {self.type} {self.status}, a={self.anchor} r={self.rotation}, occupied={[coords for coords in self.cells_occupied]}"
 
 
 class Planet(Entity):
@@ -157,7 +163,7 @@ class Planet(Entity):
     Can cross field partially - that's why position of planet (it's anchor) stored in entity instance and not in field's.
     Field only knows which cells are belong to planet's orbit.
     """
-    def __init__(self, radius: int, center: tuple, rotation: int = None): # type: ignore
+    def __init__(self, radius: int, center: tuple, rotation: Optional[int] = None):
         super().__init__()
         
         self.orbit_radius = radius
@@ -165,16 +171,16 @@ class Planet(Entity):
         self.orbit_cells = [] # all orbit cells (even those not present on field)
         self.anchor = () # coords of current planet position on orbit
         
-        self.position = 0 # is used for iterating in orbit_cells lists
         self.cells_occupied = [] # all coords pairs which are part of the field
         self.type = EntityType.PLANET
         
         if rotation is None:
             self.rotation = choice([1, -1]) # 1=clockwise; -1=counterclockwise
-        # what's fun - sign of rotation defines direction and value defines speed
+        # sign of rotation defines direction and value defines speed
         else: self.rotation = rotation
 
         self.set_orbit(radius, center)
+        self.position = 0 # is used for iterating in orbit_cells lists
 
 
     @property
@@ -184,7 +190,9 @@ class Planet(Entity):
     @position.setter
     def position(self, value: int):
         """
-        Value is either starting position of planet on it's orbit or step how far it should move from it's current position.
+        Value representing position of planet anchor on it's orbit (index of cell in orbit list).
+        First setter - initialization.
+        All next - rotating step: (1)=1 forwards; (-2)=2 backwards.
         """
         length = len(self.orbit_cells)
         if length == 0:

@@ -47,7 +47,7 @@ class Field:
 
         self._cells: dict[tuple[int, int], Cell] = {}
         self.dimensions = {"height": 0, "width": 0}
-        self.shape = "empty"
+        self.shape = None
         
         if shape is not None or params is not None: # optionally generates field if parameters given
             self.generate_field(shape, params)
@@ -67,7 +67,7 @@ class Field:
 
     def wipe_field(self) -> None:
         self._cells = {}
-        self.shape = "empty"
+        self.shape = None
         self.dimensions = {"height": 0, "width": 0}
         
         logger.info(f"{self} wiped")
@@ -92,21 +92,21 @@ class Field:
         if shape is None:
             raise FieldException(f"{self}: None can't be shape")
         
-        match shape:
+        match str(shape).lower():
 
-            case "rectangle"|"1"|1:
+            case "rectangle"|"1":
                 if len(params) < 2: raise FieldException(f"{self}: No proper rectangle dimensions given")
                 height, width = int(params[0]), int(params[1])
                 self.generate_rectangle(height, width)
                 self.shape = "rectangle"
             
-            case "circle"|"2"|2:
+            case "circle"|"2":
                 if len(params) < 1: raise FieldException(f"{self}: No proper circle radius given")
                 radius = int(params[0])
                 self.generate_circle(radius)
                 self.shape = "circle"
             
-            case "triangle"|"3"|3:
+            case "triangle"|"3":
                 if len(params) < 1: raise FieldException(f"{self}: No proper triangle size given")
                 radius = int(params[0])
                 try:
@@ -116,7 +116,7 @@ class Field:
                 self.generate_ngon(3, radius, angle)
                 self.shape = "triangle"
             
-            case "rhombus"|"4"|4:
+            case "rhombus"|"4":
                 if len(params) < 1: raise FieldException(f"{self}: No proper rhombus size given")
                 radius = int(params[0])
                 try:
@@ -126,7 +126,7 @@ class Field:
                 self.generate_ngon(4, radius, angle)
                 self.shape = "rhombus"
             
-            case "pentagon"|"5"|5:
+            case "pentagon"|"5":
                 if len(params) < 1: raise FieldException(f"{self}: No proper pentagon size given")
                 radius = int(params[0])
                 try:
@@ -136,7 +136,7 @@ class Field:
                 self.generate_ngon(5, radius, angle)
                 self.shape = "pentagon"
             
-            case "hexagon"|"6"|6:
+            case "hexagon"|"6":
                 if len(params) < 1: raise FieldException(f"{self}: No proper hexagon size given")
                 radius = int(params[0])
                 try:
@@ -146,7 +146,7 @@ class Field:
                 self.generate_ngon(6, radius, angle)   
                 self.shape = "hexagon"     
 
-            case "heptagon"|"7"|7:
+            case "heptagon"|"7":
                 if len(params) < 1: raise FieldException(f"{self}: No proper heptagon size given")
                 radius = int(params[0])
                 try:
@@ -162,11 +162,12 @@ class Field:
         logger.info(f"{self} generated")
 
 
-    def vodify_corners(self, coords: list[tuple[int, int]]) -> None:
+    def voidify_corners(self, coords: list[tuple[int, int]]) -> None:
         """
         Expects list of edges coords.
         Makes void all cells which must be vodified to form a field shape.
         It "cuts" given shape from rectangle.
+        It's continiously coming from both field x-axis edges and making void every tile until shape edge in coords met.
         """
         voided = set()
         
@@ -211,7 +212,7 @@ class Field:
                 self._cells[(y, x)] = Cell(y, x)
         
         circle_borders = circle_coords(radius, (radius, radius))
-        self.vodify_corners(circle_borders)
+        self.voidify_corners(circle_borders)
 
 
     def generate_ngon(self, n: int, radius: int, angle = 0.0) -> None:
@@ -235,7 +236,7 @@ class Field:
         for y in range(y_max):
             for x in range(x_max):
                 self._cells[(y, x)] = Cell(y, x)
-        self.vodify_corners(normalized_coords)
+        self.voidify_corners(normalized_coords)
 
 
     def get_cell(self, coords: tuple[int, int]) -> Cell:
@@ -309,7 +310,8 @@ class Field:
             """
             Returns all potential coordinates of cells near the entity.
             """
-            if coord_list is None or not isinstance(coord_list, list): raise FieldException(f"Getting neighbours requires proper (y, x) list")
+            if coord_list is None or not coord_list:
+                raise FieldException(f"Getting neighbours requires proper (y, x) list")
             
             neighbours = set()
             for y, x in coord_list:
@@ -348,7 +350,9 @@ class Field:
         for coords in orbit_cells:
             self.get_cell(coords).occupied_by = planet
         
-        planet.update_state(cells_occupied=list(orbit_cells), status=EntityStatus.DAMAGED) # damaged so first hit doesn't change it state
+        # damaged so first hit doesn't change it state
+        # planets can be destroyed only on collision with other planets
+        planet.update_state(cells_occupied=list(orbit_cells), status=EntityStatus.DAMAGED)
 
     
     def take_shot(self, coords: tuple[int, int]) -> CellStatus:
@@ -365,21 +369,23 @@ class Field:
         if cell.occupied_by is None:
             return CellStatus.MISS
         
-        occupator = cell.occupied_by
+        occupier = cell.occupied_by
         
-        if occupator.type == EntityType.PLANET:
+        if occupier.type == EntityType.PLANET:
             
-            if coords == occupator.anchor: # planet direct hit
+            if coords == occupier.anchor: # planet direct hit
                 return CellStatus.HIT
             else:
                 return CellStatus.MISS # planet's orbit
         
-        elif occupator.type == EntityType.RELAY:
-            occupator.make_damage(coords)
+        # relay returns non-hit status for Game
+        # it allows to detect relay hit and Game returns it back into shooter's field
+        elif occupier.type == EntityType.RELAY:
+            occupier.make_damage(coords)
             return CellStatus.RELAY
         
         else:
-            occupator.make_damage(coords)
+            occupier.make_damage(coords)
             return CellStatus.HIT
         
 

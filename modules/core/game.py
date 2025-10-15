@@ -288,8 +288,10 @@ class Game:
         autoplace_events = []
         attempts_limit = 50000
         all_attempts_counter = 0
-
-        for entity, amount in reversed(player.pending_entities.items()): # starts with big ones first - planet to be exact
+        
+        # starts with big ones first - planets to be exact
+        # this is made so bruteforcing has more chances to be successful when we place plents with large orbits, than 4-tiled ships and 1-tiled at the very end
+        for entity, amount in reversed(player.pending_entities.items()):
             
             if amount == 0:
                 continue
@@ -363,7 +365,7 @@ class Game:
                     reverse_shot_result = shooter.take_shot(coords)
                     shooter_field_updates.update({coords: reverse_shot_result})
                     
-                    # checking unique game ending - infinite reflection
+                    # checking unique game ending - infinite reflection when relays placed on same coords in different fields
                     if reverse_shot_result == CellStatus.RELAY:
                         self.state = GameState.OVER
                         self.winner = "Black Hole"
@@ -453,6 +455,11 @@ class Game:
             estimated_cells = 0
             for etype, amount in player.pending_entities.items():
                 # empirical formula which allows to roughly evaluate if these objects can fit on given field
+                # in average, it there'd be no planets we can evaluate how much one ship takes -  is 3 times it's length
+                # that's 6 tiles (front and back + 4 diagonals) less than it actually needs, but it assumes that ships can be placed next to broder field
+                # which is removes part of needed tiles
+                # 0.4 there represents planets' orbits. They're chaotic and can be placed next tot ships that's where 3.4 comes from
+                # that formula - is termporary solution, but kinda working
                 estimated_cells += 3.4 * amount * sizes[etype]
             
             if estimated_cells >= cells_available:

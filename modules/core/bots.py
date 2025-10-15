@@ -1,12 +1,10 @@
-from __future__ import annotations
 import random
 import logging
 
 from abc import ABC, abstractmethod
 
-from modules.common.exceptions import BotException
 from modules.common.enums import CellStatus
-from modules.common.utils import convert_input, invert_output
+from modules.common.utils import invert_output
 
 
 logger = logging.getLogger(__name__)
@@ -14,9 +12,14 @@ logger = logging.getLogger(__name__)
 
 class Bot(ABC):
     """
-TODO
+    Generator of shot coordinates (y, x) but it's inner rules.
+    Before it can shoot - must be initiated with opponent's field snapshot from the Event.
+    Then shoots.
+    After - expects renderer to give it instructions about aftermath of it's shot - Bot can't watch on field as a real player.
+    It can't communicate with the Game class directly because of security purposes.
     """
-    def __init__(self):
+    def __init__(self, name: str):
+        self.name = str(name)
         self.opponent_field: dict[tuple[int,int], CellStatus] = {}
         self.last_shot = ((-1,-1), CellStatus.MISS)
 
@@ -57,18 +60,23 @@ TODO
 
     def validate_destruction(self, destroyed_cells: list[tuple[int, int]]) -> None:
         """
-        Gets list of destroyed cells and mark closest coords to them on the field as hit.
-        To be unavailable to picked from by bot.
+        Gets list of destroyed cells and mark closest coords to them on the field as missed.
+        So bot doesn't shoot next to already destroyed ships.
+        Destruction validation is guaranteed by game events.
         """
         for coords in destroyed_cells:
             for neighbour in self.get_neighbours(coords):
                 self.opponent_field[neighbour] = CellStatus.MISS
+                
                 if hasattr(self, "hunt"):
-                    self.hunt -= set(neighbour)
+                    self.hunt.discard(neighbour)
 
-            
     
-    def shot_result(self, coords: tuple[int, int], shot_result: CellStatus):
+    def shot_result(self, coords: tuple[int, int], shot_result: CellStatus) -> None:
+        
+        if coords not in self.opponent_field:
+            logger.warning(f"{invert_output(coords)} is not part of opponent's field snapshot but {shot_result} result given.")
+        
         self.opponent_field[coords] = shot_result
         self.last_shot = (coords, shot_result)
         
@@ -81,19 +89,28 @@ TODO
         """
         pass
 
+
 class Randomer(Bot):
     """
     Simpliest AI. Shoots absolutely randomly
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, name: str):
+        super().__init__(name)
+
 
     def shoot(self) -> tuple[int, int]:
         shot_available = self.get_free_coords()
+        
         try:
             return random.choice(list(shot_available))
+        
         except IndexError:
+            logger.warning(f"{self} has no available cells to shoot - returned None as coords chose.")
             pass
+    
+
+    def __str__(self):
+        return f"RandomerBot-{self.name}"
 
 
 class Hunter(Bot):
@@ -102,11 +119,10 @@ class Hunter(Bot):
     Then starts to shoot all the neighbour cells unless full ship destruction
     When destroyed - shoots randomly again
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, name: str):
+        super().__init__(name)
         self.hunt: set[tuple[int, int]] = set()
 
-        
 
     def hunt_validation(self) -> None:
         """
@@ -115,7 +131,7 @@ class Hunter(Bot):
         self.hunt &= self.get_free_coords()
 
 
-    def shoot(self) -> tuple[int, int]:
+    def shoot(self) -> tuple[int, int]|None:
         
         logger.debug("hunting for cells: " + str(self.hunt))
         last_coords, last_result = self.last_shot
@@ -124,7 +140,14 @@ class Hunter(Bot):
 
         self.hunt_validation()
         shot_available = self.hunt if self.hunt else self.get_free_coords()
+        
         try:
             return random.choice(list(shot_available))
+        
         except IndexError:
+            logger.warning(f"{self} has no available cells to shoot - returned None as coords chose.")
             pass
+
+
+    def __str__(self):
+        return f"HunterBot-{self.name}"

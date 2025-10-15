@@ -1,4 +1,5 @@
 import logging
+from itertools import combinations
 
 from modules.core.field import Field
 from modules.core.entities import Entity, Ship, Planet, Relay
@@ -21,11 +22,15 @@ class Player:
             raise PlayerException("Give me a name!")
         else: self.name = str(name)
 
-        # list of entities which are must be set before game starts
-        self.pending_entities = {}
-        for model in list(EntityType):
-            self.pending_entities[model] = 0
-        del self.pending_entities[EntityType.UNIDENTIFIED]
+        # list of entities and their amount which are must be set before game starts
+        self.pending_entities = {
+            EntityType.CORVETTE: 0,
+            EntityType.FRIGATE: 0,
+            EntityType.DESTROYER: 0,
+            EntityType.CRUISER: 0,
+            EntityType.RELAY: 0,
+            EntityType.PLANET: 0
+        }
 
         self.entities: dict[int, Entity] = {} # actual set entities {Entity.eid: Entity}
 
@@ -124,23 +129,29 @@ class Player:
         planets = [planet for planet in self.entities.values() if planet.type == EntityType.PLANET and planet.status != EntityStatus.DESTROYED]
         
         updated_cells = {}
+        planets_sorted_by_anchors = {}
         for planet in planets:
             planet.position += value # moves planet forward on their orbits, usually with default step 1
-            updated_cells[planet.anchor] = CellStatus.PLANET
-
-        # takes all pairs of planets and checks if they're collided
-        for planet1 in planets:
-            for planet2 in planets:
-                # it's basically same object - skips
-                if planet1.eid == planet2.eid:
-                    continue
-                
-                if planet1.anchor == planet2.anchor and planet1.anchor:
-                    logger.info(f"{self} Planets collided on cell {invert_output(planet1.anchor)}{planet1.anchor}: {planet1} with {planet2}")
-                    updated_cells[planet1.anchor[:]] = CellStatus.HIT # rewrites information on this cell as hit event
-                    planet1.status = EntityStatus.DESTROYED
-                    planet2.status = EntityStatus.DESTROYED
-
+            updated_cells[planet.anchor[:]] = CellStatus.PLANET
+            
+            # sorts all planets in groups with their current position
+            try:
+                planets_sorted_by_anchors[planet.anchor[:]].append(planet)
+            except KeyError:
+                planets_sorted_by_anchors[planet.anchor[:]] = [planet]
+        
+        # if 2 planets on the same coords or more - destroys them
+        for anchor, group in planets_sorted_by_anchors.items():
+            if len(group) <= 1:
+                continue
+            
+            updated_cells[anchor] = CellStatus.HIT # rewrites information on this cell as hit event
+            
+            for planet in group:
+                planet.status = EntityStatus.DESTROYED
+            
+            logger.info(f"{self} {invert_output(anchor)} - collision of {len(group)} planets: {group}")
+        
         return updated_cells
 
 
